@@ -29,7 +29,7 @@ test('чужий chat id не має deleteNotes у змонтованому н�
     toolsForChat('7').map((t) => t.name),
     ['saveNote', 'searchNotes'],
   );
-  assert.ok(!toolsForChat('42').some((t) => t.name === 'deleteNotes')); // Права додамо на кроці 4.
+  assert.ok(toolsForChat('42').some((t) => t.name === 'deleteNotes'));
 });
 test('місток передає той самий receipt у read і зберігає chat id', async () => {
   const receipt = { id: 'r' };

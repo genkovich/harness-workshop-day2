@@ -17,5 +17,16 @@ export function toolsForChat(chatId: string) {
       run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
     }),
   ];
+  if (process.env.OWNER_CHAT_ID && chatId === process.env.OWNER_CHAT_ID) {
+    return [
+      ...tools,
+      defineTool({
+        name: 'deleteNotes',
+        description: 'Видали всі власні нотатки після прямого прохання користувача.',
+        input: v.object({}),
+        run: () => ({ output: deleteNotes(chatId) }),
+      }),
+    ];
+  }
   return tools;
 }
