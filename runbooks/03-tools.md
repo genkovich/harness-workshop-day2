@@ -36,6 +36,8 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { saveNote, searchNotes, maxNoteCharacters } from './notes.ts';
+
+// chatId приходить від Telegram через код. Модель його не бачить і не може підмінити.
 ```
 
 Додай перший тул:
@@ -82,36 +84,37 @@ export function searchNotesTool(chatId: string) {
 
 ### 4. Підключи тули до агента
 
-У `src/agent.ts` онови імпорти:
+У `src/agent.ts` заміни рядок `import { useModel } from '@flue/runtime';` на два імпорти:
 
 ```ts
 import { useModel, useTool, type AgentProps } from '@flue/runtime';
 import { saveNoteTool, searchNotesTool } from './tools.ts';
 ```
 
-Агент тепер отримує `id` розмови. Це той самий id, який `chat.ts` передав в `init`, тобто id чату:
+Далі заміни функцію `Assistant` цілком, від коментаря над нею до закривної дужки `}`. Рядок `Assistant.agentName` під нею лишається:
 
 ```ts
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
-```
 
-`useTool` додає тул до списку, який модель побачить у цьому запиті.
-
-Заміни інструкцію:
-
-```ts
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
     'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
     'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
     'If a tool returns an error, tell the user what failed.',
   ].join('\n');
+}
 ```
 
-Друге правило ми вже зустрічали вчора: «готово» від моделі нічого не доводить, доводить результат тула.
+Що змінилось:
+
+- Функція отримує `{ id }`. Це той самий id, який `chat.ts` передав в `init`, тобто id чату. `AgentProps` описує цей параметр для TypeScript.
+- `useTool` додає тул до списку, який модель побачить у запиті. Обидва тули створюємо з `id`, тож вони працюють лише з нотатками цього чату.
+- В інструкції два нові правила. Друге ми вже зустрічали вчора: «готово» від моделі нічого не доводить, доводить результат тула.
 
 ### 5. Перевір у терміналі
 
