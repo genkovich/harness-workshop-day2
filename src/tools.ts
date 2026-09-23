@@ -2,37 +2,35 @@ import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
 
-import { canDeleteNotes } from './settings.ts';
+// chatId приходить від Telegram через код. Модель його не бачить і не може підмінити.
 
-export function toolsForChat(chatId: string) {
-  // chatId отримуємо від Telegram. Модель не задає його в аргументах.
-  const save = defineTool({
+export function saveNoteTool(chatId: string) {
+  return defineTool({
     name: 'saveNote',
-    description: 'Save a note for the current user when they ask to remember it.',
+    description: 'Save one note for the user when they ask to remember something.',
     input: v.object({
       text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxNoteCharacters)),
     }),
     run: ({ data }) => ({ output: saveNote(chatId, data.text) }),
   });
+}
 
-  const search = defineTool({
+export function searchNotesTool(chatId: string) {
+  return defineTool({
     name: 'searchNotes',
-    description: "Find this user's saved notes containing the query text.",
-    input: v.object({ query: v.string() }),
+    description: "Find the user's saved notes that contain the query. An empty query returns all notes with their dates.",
+    input: v.object({
+      query: v.string(),
+    }),
     run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
   });
+}
 
-  const tools = [save, search];
-  if (!canDeleteNotes(chatId)) {
-    return tools;
-  }
-
-  const remove = defineTool({
+export function deleteNotesTool(chatId: string) {
+  return defineTool({
     name: 'deleteNotes',
-    description: 'Delete your own saved notes only on an explicit user request.',
+    description: "Delete all of the user's notes. Use only when the user explicitly asks to delete them.",
     input: v.object({}),
     run: () => ({ output: deleteNotes(chatId) }),
   });
-
-  return [...tools, remove];
 }

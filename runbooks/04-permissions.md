@@ -1,255 +1,231 @@
-# 04 · Settings і перевірка дозволів
+# 04. Власник бота
 
-## Навіщо
+[Усі етапи](README.md) · [Попередній](03-tools.md) · [Наступний](05-feedback.md)
 
-Інструкція «не видаляй чуже» не гарантує заборони. Приховаємо тул від стороннього чату й повторимо перевірку в самій функції.
+**Перед початком:** код із гілки `step-03-tools`. **Результат етапу:** `step-04-permissions`. Змінюємо лише `src/`.
 
-Початок: `step-03-tools`. Готовий результат: `step-04-permissions`.
+## Що робимо й навіщо
 
-## Як працює
+Додаємо небезпечну дію: видалити всі нотатки. Її має отримати лише власник бота. Твого бота може знайти будь-хто, тож фраза в інструкції «видаляй лише для власника» нічого не гарантує: модель можна вмовити.
 
-Після `/start` знайди власний ідентифікатор у терміналі й запиши його в OWNER_CHAT_ID у `.env`. Перезапусти бот. Це налаштування власника, не прапорець у промпті.
+## Чого бракує зараз і що зміниться
 
-У `src/settings.ts` створюємо `canDeleteNotes`. Порожнє налаштування означає заборону. У `toolsForChat` додаємо deleteNotes лише власнику. У `deleteNotes` повторюємо перевірку, щоб прямий виклик функції теж не обійшов захист.
+Учора ми ставили guard у `executeTool`: модель просить `saveDigest`, код перевіряє дозвіл і блокує виклик. Сьогодні `executeTool` належить Flue, тож перевірку ставимо на вході, який лишився нашим, у функції агента. Тул, який не дозволено, **не підключаємо зовсім**. Модель не бачить його в списку і не може викликати.
 
-Власник видаляє тільки свої нотатки. Цей приклад не містить підтвердження кожної окремої дії людиною: дозвіл дає налаштування. Фраза в описі «лише на пряме прохання» спрямовує модель, але окремим підтвердженням у коді не є.
+- `src/settings.ts`: хто власник. Бере `OWNER_CHAT_ID` з `.env`.
+- `src/tools.ts`: тул `deleteNotes`.
+- `src/agent.ts`: `useTool(deleteNotesTool(id))` лише якщо `isOwner(id)`.
 
-## Невеликі зміни
+## Маленькі зміни
 
-### `src/notes.ts`
-
-Зміни на цьому етапі. Рядки з `+` додаємо, з `-` замінюємо; символи diff у файл не копіюємо. Повний готовий файл — наприкінці.
-
-```diff
-@@ -1,3 +1,4 @@
- import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-+import { canDeleteNotes } from './settings.ts';
- import { randomUUID } from 'node:crypto';
- import * as v from 'valibot';
-@@ -56,2 +57,14 @@
-   });
- }
-+
-+export function deleteNotes(chatId: string) {
-+  // Перевірка залишається тут, навіть якщо функцію викличуть без моделі.
-+  if (!canDeleteNotes(chatId)) {
-+    throw new Error('Видалення дозволене лише власнику.');
-+  }
-+
-+  const notes = readNotes();
-+  const remaining = notes.filter((note) => note.chatId !== chatId);
-+  writeNotes(remaining);
-+  return { deleted: notes.length - remaining.length };
-+}
-```
-
-### `src/tools.ts`
-
-Зміни на цьому етапі. Рядки з `+` додаємо, з `-` замінюємо; символи diff у файл не копіюємо. Повний готовий файл — наприкінці.
-
-```diff
-@@ -1,5 +1,7 @@
- import { defineTool } from '@flue/runtime';
- import * as v from 'valibot';
--import { saveNote, searchNotes, maxNoteCharacters } from './notes.ts';
-+import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
-+
-+import { canDeleteNotes } from './settings.ts';
- 
- export function toolsForChat(chatId: string) {
-@@ -21,4 +23,16 @@
-   });
- 
--  return [save, search];
-+  const tools = [save, search];
-+  if (!canDeleteNotes(chatId)) {
-+    return tools;
-+  }
-+
-+  const remove = defineTool({
-+    name: 'deleteNotes',
-+    description: 'Delete your own saved notes only on an explicit user request.',
-+    input: v.object({}),
-+    run: () => ({ output: deleteNotes(chatId) }),
-+  });
-+
-+  return [...tools, remove];
- }
-```
-
-### `src/settings.ts`
-
-1. Додай наступну частину в цей самий файл, зберігаючи порядок.
+### 1. Налаштування: `src/settings.ts`
 
 ```ts
-export function canDeleteNotes(chatId: string) {
+// Налаштування читає лише код, модель його не бачить. Порожній OWNER_CHAT_ID означає «власника немає».
+export function isOwner(chatId: string) {
   const ownerChatId = process.env.OWNER_CHAT_ID;
-  if (!ownerChatId) {
-    return false;
+  return Boolean(ownerChatId) && chatId === ownerChatId;
+}
+```
+
+Як і вчорашній `APPROVED=1`, це налаштування для коду. У промпт воно не потрапляє. `Boolean(ownerChatId)` потрібен, щоб порожнє значення ніколи не збіглося з порожнім id.
+
+### 2. Тул `deleteNotes`
+
+У `src/tools.ts` додай `deleteNotes` до імпорту з `./notes.ts`:
+
+```ts
+import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
+```
+
+І новий тул у кінці файла:
+
+```ts
+export function deleteNotesTool(chatId: string) {
+  return defineTool({
+    name: 'deleteNotes',
+    description: "Delete all of the user's notes. Use only when the user explicitly asks to delete them.",
+    input: v.object({}),
+    run: () => ({ output: deleteNotes(chatId) }),
+  });
+}
+```
+
+Аргументів немає: `v.object({})`. Що видаляти, визначає `chatId` із замикання, тож навіть власник видаляє лише нотатки свого чату. Фраза «only when the user explicitly asks» у описі допомагає моделі не видалити нотатки випадково. Це лише підказка моделі. Захищає нас `if` в агенті, до нього дійдемо в наступному кроці.
+
+### 3. Умовний тул в агенті
+
+У `src/agent.ts` онови імпорти:
+
+```ts
+import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
+import { isOwner } from './settings.ts';
+```
+
+Після двох `useTool` додай:
+
+```ts
+  // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
+  if (isOwner(id)) {
+    useTool(deleteNotesTool(id));
   }
 ```
 
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Пригадай етап 01: Flue викликає `Assistant` перед кожним запитом до моделі. Тому `if` тут працює як перемикач: для чату власника список тулів містить три тули, для решти два. Якщо модель чужого чату все ж спробує викликати `deleteNotes`, Flue поверне їй помилку `Tool deleteNotes not found`, а `run` не виконається.
 
-```ts
-  return chatId === ownerChatId;
-}
+Вчора ми забороняли виклик, сьогодні не даємо можливості. Друге надійніше: нема що обходити. Але воно працює лише тому, що `deleteNotes` у нас викликає тільки модель. Якби цю функцію викликав ще й інший вхід, наприклад HTTP-ендпоінт чи cron, перевірку `isOwner` треба було б поставити і там.
+
+### 4. Признач себе власником
+
+```bash
+npm run check
+npm run bot
 ```
+
+Надішли боту `/start`, він відповість твоїм chat id. Зупини бота (Ctrl+C), впиши id у `.env`:
+
+```bash
+OWNER_CHAT_ID=123456789
+```
+
+Запусти бота знову. `.env` читається лише при старті процесу.
 
 ## Перевірка
 
 ```bash
-npm run typecheck
+npm run check
 npm test -- --test-name-pattern "^(00|01|02|03|04) "
 npm run bot
 ```
 
-Перевір два чати тестами. Для власника видалення повертає кількість, для іншого заборонене; чужа нотатка залишається. Живий тест проводь на навчальних записах.
+**Автоматична перевірка:** 11 тестів без мережі. Тест дивиться список тулів у запиті до моделі: у чаті власника є `deleteNotes`, в іншому немає. Інший тест змушує скриптовану модель чужого чату викликати `deleteNotes` напряму: нотатки лишаються, модель отримує `not found`. Власник видаляє лише своє.
 
-Якщо тест падає, дивись назву перевірки й фактичний результат. Перевірка типів виявляє помилки TypeScript; локальні тести не доводять доступність провайдера. Для помилки API перевір ключ, точну назву моделі та відповідь сервісу в терміналі.
+**Очікуємо вручну:** ти пишеш боту «видали всі мої нотатки», у терміналі видно `deleteNotes`, у `notes.json` твоїх нотаток більше немає. Сусід пише те саме твоєму боту: модель відповідає, що не може, а його нотатки на місці.
 
-## Готовий код етапу
+Те саме без Telegram, для чату `terminal`:
 
-Це повний стан змінених файлів. Інші файли залишаються з попереднього етапу.
-
-### `src/notes.ts`
-
-```ts
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { canDeleteNotes } from './settings.ts';
-import { randomUUID } from 'node:crypto';
-import * as v from 'valibot';
-
-export const maxNoteCharacters = 2_000;
-const noteSchema = v.object({
-  id: v.string(),
-  chatId: v.string(),
-  text: v.string(),
-});
-export type Note = v.InferOutput<typeof noteSchema>;
-
-function notesFile() {
-  return process.env.NOTES_FILE || 'notes.json';
-}
-
-export function readNotes(): Note[] {
-  const file = notesFile();
-  if (!existsSync(file)) {
-    return [];
-  }
-
-  const text = readFileSync(file, 'utf8');
-  const data: unknown = JSON.parse(text);
-  return v.parse(v.array(noteSchema), data);
-}
-
-function writeNotes(notes: Note[]) {
-  const file = notesFile();
-  const temporaryFile = `${file}.tmp`;
-
-  // Один навчальний процес: спершу повний файл, потім заміна.
-  writeFileSync(temporaryFile, JSON.stringify(notes, null, 2), 'utf8');
-  renameSync(temporaryFile, file);
-}
-
-export function saveNote(chatId: string, text: string) {
-  const content = text.trim();
-  if (!content || content.length > maxNoteCharacters) {
-    throw new Error(`Нотатка має містити від 1 до ${maxNoteCharacters} символів.`);
-  }
-
-  const note = { id: randomUUID(), chatId, text: content };
-  const notes = readNotes();
-  notes.push(note);
-  writeNotes(notes);
-  return note;
-}
-
-export function searchNotes(chatId: string, query: string) {
-  const searchText = query.toLowerCase();
-  return readNotes().filter((note) => {
-    const sameChat = note.chatId === chatId;
-    const matches = note.text.toLowerCase().includes(searchText);
-    return sameChat && matches;
-  });
-}
-
-export function deleteNotes(chatId: string) {
-  // Перевірка залишається тут, навіть якщо функцію викличуть без моделі.
-  if (!canDeleteNotes(chatId)) {
-    throw new Error('Видалення дозволене лише власнику.');
-  }
-
-  const notes = readNotes();
-  const remaining = notes.filter((note) => note.chatId !== chatId);
-  writeNotes(remaining);
-  return { deleted: notes.length - remaining.length };
-}
+```bash
+OWNER_CHAT_ID=terminal npm run ask -- "Видали всі мої нотатки"
+npm run ask -- "Видали всі мої нотатки"
 ```
 
-### `src/tools.ts`
+Змінна з командного рядка перекриває `.env` лише для цього запуску. У першому випадку `deleteNotes` є серед тулів, у другому немає.
+
+Якщо ти вже говорив з ботом до того, як став власником, Flue додасть у розмову службове повідомлення про новий тул. Це нормально: так модель дізнається, що список змінився посеред розмови.
+
+**Якщо не так:** тул не зʼявився у власника. Перевір, що в `.env` рівно id з `/start`, без пробілів, і що бота перезапущено.
+
+**Збережи свою зміну:**
+
+```bash
+git add src
+git diff --cached
+git commit -m "Етап 04: власник бота"
+```
+
+## Якщо не встиг: готова гілка
+
+```bash
+git add src
+git diff --cached --quiet || git commit -m "Моя спроба етапу 04"
+git fetch origin
+git switch -c work-05 origin/step-04-permissions
+npm run check
+```
+
+Якщо встиг сам, продовжуй у своїй гілці з [етапу 05](05-feedback.md).
+
+## Готовий код
+
+Повний вміст файлів, які змінились на цьому етапі. Решта файлів лишається як була.
+
+<details>
+<summary>src/agent.ts</summary>
+
+```ts
+'use agent';
+
+import { useModel, useTool, type AgentProps } from '@flue/runtime';
+import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
+import { isOwner } from './settings.ts';
+
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
+export function Assistant({ id }: AgentProps) {
+  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
+  // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
+  if (isOwner(id)) {
+    useTool(deleteNotesTool(id));
+  }
+
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
+  return [
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
+  ].join('\n');
+}
+
+Assistant.agentName = 'workshop-assistant';
+```
+
+</details>
+
+<details>
+<summary>src/tools.ts</summary>
 
 ```ts
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
 
-import { canDeleteNotes } from './settings.ts';
+// chatId приходить від Telegram через код. Модель його не бачить і не може підмінити.
 
-export function toolsForChat(chatId: string) {
-  // chatId отримуємо від Telegram. Модель не задає його в аргументах.
-  const save = defineTool({
+export function saveNoteTool(chatId: string) {
+  return defineTool({
     name: 'saveNote',
-    description: 'Save a note for the current user when they ask to remember it.',
+    description: 'Save one note for the user when they ask to remember something.',
     input: v.object({
       text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxNoteCharacters)),
     }),
     run: ({ data }) => ({ output: saveNote(chatId, data.text) }),
   });
+}
 
-  const search = defineTool({
+export function searchNotesTool(chatId: string) {
+  return defineTool({
     name: 'searchNotes',
-    description: "Find this user's saved notes containing the query text.",
-    input: v.object({ query: v.string() }),
+    description: "Find the user's saved notes that contain the query. An empty query returns all notes with their dates.",
+    input: v.object({
+      query: v.string(),
+    }),
     run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
   });
+}
 
-  const tools = [save, search];
-  if (!canDeleteNotes(chatId)) {
-    return tools;
-  }
-
-  const remove = defineTool({
+export function deleteNotesTool(chatId: string) {
+  return defineTool({
     name: 'deleteNotes',
-    description: 'Delete your own saved notes only on an explicit user request.',
+    description: "Delete all of the user's notes. Use only when the user explicitly asks to delete them.",
     input: v.object({}),
     run: () => ({ output: deleteNotes(chatId) }),
   });
-
-  return [...tools, remove];
 }
 ```
 
-### `src/settings.ts`
+</details>
+
+<details>
+<summary>src/settings.ts</summary>
 
 ```ts
-export function canDeleteNotes(chatId: string) {
+// Налаштування читає лише код, модель його не бачить. Порожній OWNER_CHAT_ID означає «власника немає».
+export function isOwner(chatId: string) {
   const ownerChatId = process.env.OWNER_CHAT_ID;
-  if (!ownerChatId) {
-    return false;
-  }
-
-  return chatId === ownerChatId;
+  return Boolean(ownerChatId) && chatId === ownerChatId;
 }
 ```
 
-## Якщо не встигаєш
-
-```bash
-git stash push -u -m "my-day2-progress"
-git switch step-04-permissions
-```
-
-Першою командою зберігаєш власні зміни окремо, включно з новими src-файлами. `.env`, база й нотатки ігноруються Git і залишаються на місці. Не застосовуй stash поверх готової гілки автоматично.
-
-Далі: [05 · Журнал і корисний feedback](05-feedback.md).
+</details>
