@@ -1,158 +1,186 @@
-# 06 · Skill для стендапу
+# 06. Skill для стендапу
 
-## Навіщо
+[Усі етапи](README.md) · [Попередній](05-feedback.md)
 
-Стендап потребує порядку роботи й формату відповіді. Винесемо ці вказівки у skill, щоб не перевантажувати постійну інструкцію агента.
+**Перед початком:** код із гілки `step-05-feedback`. **Результат етапу:** `step-06-skill`. Змінюємо лише `src/`.
 
-Початок: `step-05-feedback`. Готовий результат: `step-06-skill`.
+## Що робимо й навіщо
 
-## Як працює
+Хочемо, щоб бот складав стендап з нотаток у сталому форматі. Інструкцію для цього можна дописати в system prompt, але тоді вона йтиме в кожен запит, навіть у «привіт». Skill дає інструкцію лише тоді, коли вона потрібна.
 
-Файл `skills/standup/SKILL.md` уже є в заготовці. У `src/skill.ts` читаємо текст, прибираємо YAML-заголовок і передаємо інструкцію в defineSkill. Регулярний вираз тут видаляє початковий блок між двома `---`; він не є універсальним YAML-парсером.
+## Чого бракує зараз і що зміниться
 
-У `src/agent.ts` додаємо useSkill. Код читає файл під час завантаження модуля; це не означає, що вся інструкція вже передана моделі. Flue реєструє skill і забезпечує його активацію. Точний механізм показуємо за документацією встановленої версії.
+Учора ми писали skills самі: читали папку, складали каталог описів у контекст і додавали тул `readSkill`. Сьогодні лишається тільки прочитати файл. Каталог і тул `activate_skill` додає Flue.
 
-Skill описує процедуру: знайти власні нотатки, розділити зроблене й плани, не вигадати блокери. Він використовує ті самі тули й дозволи. Нового агента або окремого незалежного циклу ми не створюємо.
+- `skills/standup/SKILL.md` уже лежить у репозиторії.
+- `src/skill.ts`: читаємо файл і створюємо skill через `defineSkill`.
+- `src/agent.ts`: `useSkill(standup)`.
 
-## Невеликі зміни
+## Маленькі зміни
 
-### `src/agent.ts`
+### 1. Подивись на `skills/standup/SKILL.md`
 
-Зміни на цьому етапі. Рядки з `+` додаємо, з `-` замінюємо; символи diff у файл не копіюємо. Повний готовий файл — наприкінці.
+Між `---` лежать назва й опис. Опис модель бачить завжди, і лише за ним вирішує, чи потрібен skill. Нижче сама процедура: спершу `searchNotes`, потім три рядки «Зроблено», «Далі», «Блокери». Першим кроком стоїть виклик тула, щоб модель брала факти з нотаток. Без нього вона складе стендап з памʼяті розмови.
 
-```diff
-@@ -1,8 +1,9 @@
- 'use agent';
- 
--import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
-+import { useModel, useTool, useSkill, useResponseFinish, type AgentProps } from '@flue/runtime';
- 
- import { toolsForChat } from './tools.ts';
- import { reportUsage } from './feedback.ts';
-+import { standup } from './skill.ts';
- 
- export function Assistant({ id }: AgentProps) {
-@@ -14,4 +15,6 @@
-   }
- 
-+  useSkill(standup);
-+
-   useResponseFinish(({ response }) => {
-     reportUsage(response.usage);
-@@ -22,4 +25,5 @@
-     'Reply in Ukrainian.',
-     'Use tools to save and search notes. Do not invent saved facts.',
-+    'Activate the standup skill when the user asks for a standup.',
-     'Report success only after a successful tool result.',
-   ].join('\n');
-```
-
-### `src/skill.ts`
-
-1. Додай імпорти та оголошення, які використовуємо нижче.
+### 2. Skill з файла: `src/skill.ts`
 
 ```ts
 import { defineSkill } from '@flue/runtime';
 import { readFileSync } from 'node:fs';
 ```
 
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Прочитай файл і дістань опис, як учора в `skills.ts`:
 
 ```ts
-const file = new URL('../skills/standup/SKILL.md', import.meta.url);
-const text = readFileSync(file, 'utf8');
-// Метадані для каталогу задаємо нижче; прибираємо YAML-заголовок файла.
-const instructions = text.replace(/^---[\s\S]*?---\s*/, '');
+// Учора каталог і readSkill писали самі. Сьогодні лишилось прочитати файл: решту робить Flue.
+const text = readFileSync(new URL('../skills/standup/SKILL.md', import.meta.url), 'utf8');
+const description = /^description: (.+)$/m.exec(text)?.[1];
+if (!description) {
+  throw new Error('Немає description у skills/standup/SKILL.md');
+}
 ```
 
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Створи skill:
 
 ```ts
 export const standup = defineSkill({
   name: 'standup',
-  description: 'Prepare a standup from saved notes: yesterday, today, blockers.',
-  instructions,
+  description,
+  // Модель отримає цей текст лише після activate_skill. Заголовок між --- прибираємо.
+  instructions: text.replace(/^---[\s\S]*?---\s*/, ''),
 });
 ```
+
+У документації Flue skill підключають коротше: `import standup from '../skills/standup/SKILL.md'`. Такий імпорт працює, коли код збирає Flue (`flue run` чи vite). Бота ми запускаємо через `tsx`, а він Markdown імпортувати не вміє, тому читаємо файл самі.
+
+### 3. Підключи skill
+
+У `src/agent.ts` додай `useSkill` до імпорту з `@flue/runtime` і імпортуй skill:
+
+```ts
+import { useModel, useTool, useSkill, useResponseFinish, type AgentProps } from '@flue/runtime';
+```
+
+```ts
+import { standup } from './skill.ts';
+```
+
+Після блоку з `deleteNotes`:
+
+```ts
+  useSkill(standup);
+```
+
+Тепер у system prompt зʼявиться розділ `Available Skills` з одним рядком: назва й опис. Коли модель вирішить, що просять стендап, вона викличе тул `activate_skill` і отримає повну інструкцію як результат тула. System prompt при цьому не змінюється.
 
 ## Перевірка
 
 ```bash
-npm run typecheck
-npm test -- --test-name-pattern "^(00|01|02|03|04|05|06) "
+npm run check
+npm test
 npm run bot
 ```
 
-Попроси «Зроби стендап із моїх нотаток». Є розділи «Вчора», «Сьогодні», «Блокери»; відсутні факти позначено, а не вигадано. Перевір, чи відповідає зміст збереженим нотаткам.
+**Автоматична перевірка:** усі 13 тестів без мережі. Тест `06 Skill` дивиться, що перший запит до моделі містить опис skill, але не містить тексту процедури, а після `activate_skill` процедура є в історії.
 
-Якщо тест падає, дивись назву перевірки й фактичний результат. Перевірка типів виявляє помилки TypeScript; локальні тести не доводять доступність провайдера. Для помилки API перевір ключ, точну назву моделі та відповідь сервісу в терміналі.
+**Очікуємо вручну.** Додай боту кілька нотаток: що зробив, що плануєш, що заважає. Потім попроси «зроби стендап». У журналі:
 
-## Готовий код етапу
+```text
+{"tools":["activate_skill","searchNotes"],"totalTokens":…}
+```
 
-Це повний стан змінених файлів. Інші файли залишаються з попереднього етапу.
+Відповідь має три рядки: Зроблено, Далі, Блокери.
 
-### `src/agent.ts`
+**Якщо не так:**
+
+- У журналі немає `activate_skill`: модель не впізнала задачу за описом. Напиши прямо «зроби стендап» або уточни `description` у `SKILL.md`.
+- Є `activate_skill`, але немає `searchNotes`: модель склала стендап з памʼяті розмови. Перевір, що перший крок у `SKILL.md` на місці.
+
+**Збережи свою зміну:**
+
+```bash
+git add src
+git diff --cached
+git commit -m "Етап 06: skill для стендапу"
+```
+
+## Що далі
+
+Готове рішення лежить у `main` і `step-06-skill`. Порівняй свій код з ними:
+
+```bash
+git fetch origin
+git diff origin/main -- src
+```
+
+Що можна спробувати самостійно: другий skill (наприклад, підсумок тижня), тул `deleteNote` для однієї нотатки за id, або власника, який бачить статистику всіх чатів. Для останнього подумай, хто і як перевіряє дозвіл.
+
+## Готовий код
+
+Повний вміст файлів, які змінились на цьому етапі. Решта файлів лишається як була.
+
+<details>
+<summary>src/agent.ts</summary>
 
 ```ts
 'use agent';
 
 import { useModel, useTool, useSkill, useResponseFinish, type AgentProps } from '@flue/runtime';
-
-import { toolsForChat } from './tools.ts';
-import { reportUsage } from './feedback.ts';
+import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
+import { isOwner } from './settings.ts';
+import { logResponse } from './log.ts';
 import { standup } from './skill.ts';
 
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  // Провайдера та модель задаємо в .env; цикл виконує Flue.
   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
 
-  for (const tool of toolsForChat(id)) {
-    useTool(tool);
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
+  // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
+  if (isOwner(id)) {
+    useTool(deleteNotesTool(id));
   }
 
   useSkill(standup);
 
   useResponseFinish(({ response }) => {
-    reportUsage(response.usage);
+    logResponse(response);
   });
 
-  // Це інструкція агента. Завдання передамо окремим повідомленням.
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
-    'Reply in Ukrainian.',
-    'Use tools to save and search notes. Do not invent saved facts.',
-    'Activate the standup skill when the user asks for a standup.',
-    'Report success only after a successful tool result.',
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
   ].join('\n');
 }
 
 Assistant.agentName = 'workshop-assistant';
 ```
 
-### `src/skill.ts`
+</details>
+
+<details>
+<summary>src/skill.ts</summary>
 
 ```ts
 import { defineSkill } from '@flue/runtime';
 import { readFileSync } from 'node:fs';
 
-const file = new URL('../skills/standup/SKILL.md', import.meta.url);
-const text = readFileSync(file, 'utf8');
-// Метадані для каталогу задаємо нижче; прибираємо YAML-заголовок файла.
-const instructions = text.replace(/^---[\s\S]*?---\s*/, '');
+// Учора каталог і readSkill писали самі. Сьогодні лишилось прочитати файл: решту робить Flue.
+const text = readFileSync(new URL('../skills/standup/SKILL.md', import.meta.url), 'utf8');
+const description = /^description: (.+)$/m.exec(text)?.[1];
+if (!description) {
+  throw new Error('Немає description у skills/standup/SKILL.md');
+}
 
 export const standup = defineSkill({
   name: 'standup',
-  description: 'Prepare a standup from saved notes: yesterday, today, blockers.',
-  instructions,
+  description,
+  // Модель отримає цей текст лише після activate_skill. Заголовок між --- прибираємо.
+  instructions: text.replace(/^---[\s\S]*?---\s*/, ''),
 });
 ```
 
-## Якщо не встигаєш
-
-```bash
-git stash push -u -m "my-day2-progress"
-git switch step-06-skill
-```
-
-Першою командою зберігаєш власні зміни окремо, включно з новими src-файлами. `.env`, база й нотатки ігноруються Git і залишаються на місці. Не застосовуй stash поверх готової гілки автоматично.
-
-Маємо агента з інтерфейсом, тулами, перевіркою доступу та skill. Наступний крок розвитку — обрати реальний збій і перевірити одну зміну на тих самих задачах. Обовʼязкового фінального збереження чи домашнього завдання немає.
+</details>

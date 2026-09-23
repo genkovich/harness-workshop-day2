@@ -7,12 +7,12 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
+    "ask": "flue run src/agent.ts --id terminal --message",
     "bot": "tsx --env-file-if-exists=.env src/bot.ts",
-    "ask": "node --env-file-if-exists=.env ./node_modules/@flue/cli/bin/flue.mjs run src/agent.ts -m",
-    "test": "node --import tsx --test",
-    "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test",
-    "start": "tsx --env-file-if-exists=.env src/main.ts"
+    "setup:check": "tsx --env-file-if-exists=.env scripts/check-setup.ts",
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test --test-reporter=spec",
+    "prepare": "node -e \"const fs = require('node:fs'); if (!fs.existsSync('.env')) fs.copyFileSync('.env.example', '.env');\""
   },
   "dependencies": {
     "@flue/cli": "2.0.6",
@@ -21,11 +21,13 @@
     "valibot": "1.5.0"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.83.0",
     "@types/node": "26.6.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2"
   },
   "overrides": {
-    "hono": "4.13.8"
+    "hono": "4.13.8",
+    "@earendil-works/pi-ai": "0.83.0"
   }
 }
