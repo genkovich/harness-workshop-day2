@@ -1,57 +1,54 @@
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import * as v from 'valibot';
+
+// Звичайний код застосунку: про модель і Flue цей файл нічого не знає.
+export type Note = {
+  id: string;
+  chatId: string;
+  text: string;
+  createdAt: string;
+};
 
 export const maxNoteCharacters = 2_000;
-const noteSchema = v.object({
-  id: v.string(),
-  chatId: v.string(),
-  text: v.string(),
-});
-export type Note = v.InferOutput<typeof noteSchema>;
 
 function notesFile() {
+  // Тести підставляють тимчасовий файл через NOTES_FILE.
   return process.env.NOTES_FILE || 'notes.json';
 }
 
 export function readNotes(): Note[] {
-  const file = notesFile();
-  if (!existsSync(file)) {
+  if (!existsSync(notesFile())) {
     return [];
   }
-
-  const text = readFileSync(file, 'utf8');
-  const data: unknown = JSON.parse(text);
-  return v.parse(v.array(noteSchema), data);
+  return JSON.parse(readFileSync(notesFile(), 'utf8'));
 }
 
 function writeNotes(notes: Note[]) {
-  const file = notesFile();
-  const temporaryFile = `${file}.tmp`;
-
-  // Один навчальний процес: спершу повний файл, потім заміна.
-  writeFileSync(temporaryFile, JSON.stringify(notes, null, 2), 'utf8');
-  renameSync(temporaryFile, file);
+  writeFileSync(notesFile(), JSON.stringify(notes, null, 2), 'utf8');
 }
 
 export function saveNote(chatId: string, text: string) {
-  const content = text.trim();
-  if (!content || content.length > maxNoteCharacters) {
-    throw new Error(`Нотатка має містити від 1 до ${maxNoteCharacters} символів.`);
-  }
-
-  const note = { id: randomUUID(), chatId, text: content };
-  const notes = readNotes();
-  notes.push(note);
-  writeNotes(notes);
+  const note = {
+    id: randomUUID(),
+    chatId,
+    text: text.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  writeNotes([...readNotes(), note]);
   return note;
 }
 
-export function searchNotes(chatId: string, query: string) {
-  const searchText = query.toLowerCase();
+export function searchNotes(chatId: string, query = '') {
+  const search = query.trim().toLowerCase();
+  // Спершу лише свій чат, потім пошук за текстом. Порожній запит повертає всі.
   return readNotes().filter((note) => {
-    const sameChat = note.chatId === chatId;
-    const matches = note.text.toLowerCase().includes(searchText);
-    return sameChat && matches;
+    return note.chatId === chatId && note.text.toLowerCase().includes(search);
   });
+}
+
+export function deleteNotes(chatId: string) {
+  const notes = readNotes();
+  const remaining = notes.filter((note) => note.chatId !== chatId);
+  writeNotes(remaining);
+  return { deleted: notes.length - remaining.length };
 }
