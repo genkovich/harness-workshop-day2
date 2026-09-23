@@ -1,159 +1,36 @@
-# 03 · Тули для нотаток
+# 03. Тули для нотаток
 
-## Навіщо
+[Усі етапи](README.md) · [Попередній](02-telegram.md) · [Наступний](04-permissions.md)
 
-Модель не може записати нотатку самим текстом відповіді. Дамо їй дві конкретні дії: зберегти факт і знайти його. chatId бере код, а не модель.
+**Перед початком:** код із гілки `step-02-telegram`. **Результат етапу:** `step-03-tools`. Змінюємо лише `src/`.
 
-Початок: `step-02-telegram`. Готовий результат: `step-03-tools`.
+## Що робимо й навіщо
 
-## Як працює
+Зараз бот памʼятає розмову, але це памʼять моделі: вона може щось переплутати, а людина не може відкрити й перевірити, що там лежить. Нам потрібні справжні нотатки у файлі. Код, що їх зберігає, уже є в `src/notes.ts`. Даємо агенту дві дії над ним: зберегти нотатку і знайти нотатки.
 
-Спочатку створюємо звичайні функції у `src/notes.ts`. `Note` виводиться зі схеми Valibot: id, chatId і text — рядки. `readNotes` перевіряє дані з диска. Якщо файл пошкоджений, показуємо помилку; не затираємо його порожнім масивом.
+## Чого бракує зараз і що зміниться
 
-`writeNotes` спочатку пише тимчасовий файл, потім замінює основний. Це простий приклад для одного процесу, не база для кількох серверів. `saveNote` прибирає зайві пробіли й перевіряє довжину. `searchNotes` спочатку обмежує дані своїм чатом і шукає входження тексту; це не семантичний пошук.
+Учора, щоб додати тул, ми правили чотири місця: опис у `tools`, схему Zod, гілку `case` у `runTool` і `executeTool` з `try/catch`. Сьогодні тул описується одним обʼєктом, а виконання, перевірку аргументів і повернення результату в історію бере Flue.
 
-Після цього описуємо тули у `src/tools.ts`. `defineTool` поєднує name, description, input і run. Valibot описує та перевіряє аргументи. `run` повертає фактичний результат у output. Описи англійською пояснюють моделі призначення; коментарі й ранбук українською.
+- `src/tools.ts`: два тули, `saveNote` і `searchNotes`.
+- `src/agent.ts`: агент отримує id розмови і підключає тули.
+- Модель ніколи не передає `chatId`. Його знає лише наш код, і саме він вирішує, чиї нотатки читати.
 
-Нарешті монтуємо кожний тул через `useTool` у `src/agent.ts`. Модель обирає дію, Flue виконує run. Записаний JSON — дані застосунку; пошук повертає їх моделі лише на виклик тула.
+## Маленькі зміни
 
-## Невеликі зміни
+### 1. Подивись на `src/notes.ts`
 
-### `src/agent.ts`
+Файл уже готовий. Три функції, які нам потрібні:
 
-Зміни на цьому етапі. Рядки з `+` додаємо, з `-` замінюємо; символи diff у файл не копіюємо. Повний готовий файл — наприкінці.
+- `saveNote(chatId, text)` дописує нотатку в `notes.json` і повертає її з `id` і датою `createdAt`.
+- `searchNotes(chatId, query)` повертає нотатки цього чату, у яких є текст `query`. Порожній `query` поверне всі.
+- `deleteNotes(chatId)` видаляє всі нотатки чату. Знадобиться на етапі 04.
 
-```diff
-@@ -1,12 +1,22 @@
- 'use agent';
- 
--import { useModel } from '@flue/runtime';
-+import { useModel, useTool, type AgentProps } from '@flue/runtime';
- 
--export function Assistant() {
-+import { toolsForChat } from './tools.ts';
-+
-+export function Assistant({ id }: AgentProps) {
-   // Провайдера та модель задаємо в .env; цикл виконує Flue.
-   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
- 
-+  for (const tool of toolsForChat(id)) {
-+    useTool(tool);
-+  }
-+
-   // Це інструкція агента. Завдання передамо окремим повідомленням.
--  return 'Reply in Ukrainian. Say when you do not know the answer.';
-+  return [
-+    'Reply in Ukrainian.',
-+    'Use tools to save and search notes. Do not invent saved facts.',
-+    'Report success only after a successful tool result.',
-+  ].join('\n');
- }
- 
-```
+Це звичайний код застосунку. Він нічого не знає ні про модель, ні про Flue, і так має бути.
 
-### `src/notes.ts`
+### 2. Тул `saveNote`
 
-1. Додай імпорти та оголошення, які використовуємо нижче.
-
-```ts
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import * as v from 'valibot';
-```
-
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-export const maxNoteCharacters = 2_000;
-const noteSchema = v.object({
-  id: v.string(),
-  chatId: v.string(),
-  text: v.string(),
-});
-export type Note = v.InferOutput<typeof noteSchema>;
-```
-
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-function notesFile() {
-  return process.env.NOTES_FILE || 'notes.json';
-}
-```
-
-4. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-export function readNotes(): Note[] {
-  const file = notesFile();
-  if (!existsSync(file)) {
-    return [];
-  }
-```
-
-5. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-  const text = readFileSync(file, 'utf8');
-  const data: unknown = JSON.parse(text);
-  return v.parse(v.array(noteSchema), data);
-}
-```
-
-6. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-function writeNotes(notes: Note[]) {
-  const file = notesFile();
-  const temporaryFile = `${file}.tmp`;
-```
-
-7. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-  // Один навчальний процес: спершу повний файл, потім заміна.
-  writeFileSync(temporaryFile, JSON.stringify(notes, null, 2), 'utf8');
-  renameSync(temporaryFile, file);
-}
-```
-
-8. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-export function saveNote(chatId: string, text: string) {
-  const content = text.trim();
-  if (!content || content.length > maxNoteCharacters) {
-    throw new Error(`Нотатка має містити від 1 до ${maxNoteCharacters} символів.`);
-  }
-```
-
-9. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-  const note = { id: randomUUID(), chatId, text: content };
-  const notes = readNotes();
-  notes.push(note);
-  writeNotes(notes);
-  return note;
-}
-```
-
-10. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-export function searchNotes(chatId: string, query: string) {
-  const searchText = query.toLowerCase();
-  return readNotes().filter((note) => {
-    const sameChat = note.chatId === chatId;
-    const matches = note.text.toLowerCase().includes(searchText);
-    return sameChat && matches;
-  });
-}
-```
-
-### `src/tools.ts`
-
-1. Додай імпорти та оголошення, які використовуємо нижче.
+Створи `src/tools.ts`:
 
 ```ts
 import { defineTool } from '@flue/runtime';
@@ -161,181 +38,197 @@ import * as v from 'valibot';
 import { saveNote, searchNotes, maxNoteCharacters } from './notes.ts';
 ```
 
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Додай перший тул:
 
 ```ts
-export function toolsForChat(chatId: string) {
-  // chatId отримуємо від Telegram. Модель не задає його в аргументах.
-  const save = defineTool({
+export function saveNoteTool(chatId: string) {
+  return defineTool({
     name: 'saveNote',
-    description: 'Save a note for the current user when they ask to remember it.',
+    description: 'Save one note for the user when they ask to remember something.',
     input: v.object({
       text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxNoteCharacters)),
     }),
     run: ({ data }) => ({ output: saveNote(chatId, data.text) }),
   });
+}
 ```
 
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Чотири поля `defineTool` відповідають учорашнім чотирьом місцям:
+
+- `name` і `description` бачить модель. Опис вирішує, **коли** модель покличе тул. Ми перевіряли це вчора на етапі 09.
+- `input` описує аргументи через Valibot. `v.pipe` застосовує перевірки по черзі: рядок, обрізати пробіли, не порожній, не довший за ліміт. Якщо модель передасть порожній текст, Flue не викличе `run`, а поверне моделі помилку, щоб вона виправилась. Учора це робили `parse` і `try/catch`.
+- `run` виконує дію. `data` вже перевірені й типізовані. Те, що лежить в `output`, Flue сам покладе в історію як результат тула.
+
+Навіщо тут функція `saveNoteTool(chatId)` замість простого обʼєкта? Тул створюється для конкретного чату, і `chatId` потрапляє в `run` із замикання. У схемі `input` поля `chatId` немає, тож модель не може попросити «збережи в чат 42». Учора ми вчили: аргументи від моделі це не дозвіл. Тут це вбудовано в саму форму тула.
+
+### 3. Тул `searchNotes`
+
+Нижче в тому ж файлі:
 
 ```ts
-  const search = defineTool({
+export function searchNotesTool(chatId: string) {
+  return defineTool({
     name: 'searchNotes',
-    description: "Find this user's saved notes containing the query text.",
-    input: v.object({ query: v.string() }),
+    description: "Find the user's saved notes that contain the query. An empty query returns all notes with their dates.",
+    input: v.object({
+      query: v.string(),
+    }),
     run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
   });
+}
 ```
 
-4. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Опис прямо каже, що порожній запит поверне все. Без цього модель на «що в мене є?» вигадувала б ключове слово для пошуку.
+
+### 4. Підключи тули до агента
+
+У `src/agent.ts` онови імпорти:
 
 ```ts
-  return [save, search];
-}
+import { useModel, useTool, type AgentProps } from '@flue/runtime';
+import { saveNoteTool, searchNotesTool } from './tools.ts';
+```
+
+Агент тепер отримує `id` розмови. Це той самий id, який `chat.ts` передав в `init`, тобто id чату:
+
+```ts
+export function Assistant({ id }: AgentProps) {
+  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
+```
+
+`useTool` додає тул до списку, який модель побачить у цьому запиті.
+
+Заміни інструкцію:
+
+```ts
+  return [
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
+  ].join('\n');
+```
+
+Друге правило ми вже зустрічали вчора: «готово» від моделі нічого не доводить, доводить результат тула.
+
+### 5. Перевір у терміналі
+
+```bash
+npm run check
+npm run ask -- "Запамʼятай: у пʼятницю реліз о 15:00"
+```
+
+У кроках Flue має зʼявитися `tool saveNote`. Відкрий `notes.json`: там нотатка з `chatId: "terminal"`, бо саме такий id у скрипта `ask`.
+
+```bash
+npm run ask -- "Коли в мене реліз?"
 ```
 
 ## Перевірка
 
 ```bash
-npm run typecheck
+npm run check
 npm test -- --test-name-pattern "^(00|01|02|03) "
 npm run bot
 ```
 
-Напиши «Запамʼятай: сьогодні завершено прототип харнесу». Перевір notes.json. Потім «Знайди нотатку про прототип». Відповідь має спиратися на власний запис.
+**Автоматична перевірка:** 8 тестів без мережі. Скриптована модель просить `saveNote`, і тест дивиться: модель бачила рівно два тули, файл містить нотатку з `chatId` від коду, результат тула повернувся моделі. Окремий тест передає порожній текст і перевіряє, що файл не змінився, а модель отримала помилку.
 
-Якщо тест падає, дивись назву перевірки й фактичний результат. Перевірка типів виявляє помилки TypeScript; локальні тести не доводять доступність провайдера. Для помилки API перевір ключ, точну назву моделі та відповідь сервісу в терміналі.
+**Очікуємо вручну:** у Telegram «запамʼятай …», потім «що в мене є?». У `notes.json` зʼявилась нотатка з id твого чату. Сусід через твого бота твоїх нотаток не бачить.
 
-## Готовий код етапу
+**Якщо не так:**
 
-Це повний стан змінених файлів. Інші файли залишаються з попереднього етапу.
+- Модель відповідає «зберіг», а в `notes.json` нічого немає: дивись кроки в терміналі. Якщо `saveNote` не викликався, це і є причина, чому в інструкції є правило про результат тула.
+- `Type 'string' is not assignable…` у `Assistant`: перевір, що функція приймає `{ id }: AgentProps`.
 
-### `src/agent.ts`
+**Збережи свою зміну:**
+
+```bash
+git add src
+git diff --cached
+git commit -m "Етап 03: тули для нотаток"
+```
+
+## Якщо не встиг: готова гілка
+
+```bash
+git add src
+git diff --cached --quiet || git commit -m "Моя спроба етапу 03"
+git fetch origin
+git switch -c work-04 origin/step-03-tools
+npm run check
+```
+
+Твій коміт лишився в попередній гілці. `notes.json` не в Git, тому твої нотатки лишаються.
+
+Якщо встиг сам, продовжуй у своїй гілці з [етапу 04](04-permissions.md).
+
+## Готовий код
+
+Повний вміст файлів, які змінились на цьому етапі. Решта файлів лишається як була.
+
+<details>
+<summary>src/agent.ts</summary>
 
 ```ts
 'use agent';
 
 import { useModel, useTool, type AgentProps } from '@flue/runtime';
+import { saveNoteTool, searchNotesTool } from './tools.ts';
 
-import { toolsForChat } from './tools.ts';
-
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  // Провайдера та модель задаємо в .env; цикл виконує Flue.
   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
 
-  for (const tool of toolsForChat(id)) {
-    useTool(tool);
-  }
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
 
-  // Це інструкція агента. Завдання передамо окремим повідомленням.
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
-    'Reply in Ukrainian.',
-    'Use tools to save and search notes. Do not invent saved facts.',
-    'Report success only after a successful tool result.',
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
   ].join('\n');
 }
 
 Assistant.agentName = 'workshop-assistant';
 ```
 
-### `src/notes.ts`
+</details>
 
-```ts
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import * as v from 'valibot';
-
-export const maxNoteCharacters = 2_000;
-const noteSchema = v.object({
-  id: v.string(),
-  chatId: v.string(),
-  text: v.string(),
-});
-export type Note = v.InferOutput<typeof noteSchema>;
-
-function notesFile() {
-  return process.env.NOTES_FILE || 'notes.json';
-}
-
-export function readNotes(): Note[] {
-  const file = notesFile();
-  if (!existsSync(file)) {
-    return [];
-  }
-
-  const text = readFileSync(file, 'utf8');
-  const data: unknown = JSON.parse(text);
-  return v.parse(v.array(noteSchema), data);
-}
-
-function writeNotes(notes: Note[]) {
-  const file = notesFile();
-  const temporaryFile = `${file}.tmp`;
-
-  // Один навчальний процес: спершу повний файл, потім заміна.
-  writeFileSync(temporaryFile, JSON.stringify(notes, null, 2), 'utf8');
-  renameSync(temporaryFile, file);
-}
-
-export function saveNote(chatId: string, text: string) {
-  const content = text.trim();
-  if (!content || content.length > maxNoteCharacters) {
-    throw new Error(`Нотатка має містити від 1 до ${maxNoteCharacters} символів.`);
-  }
-
-  const note = { id: randomUUID(), chatId, text: content };
-  const notes = readNotes();
-  notes.push(note);
-  writeNotes(notes);
-  return note;
-}
-
-export function searchNotes(chatId: string, query: string) {
-  const searchText = query.toLowerCase();
-  return readNotes().filter((note) => {
-    const sameChat = note.chatId === chatId;
-    const matches = note.text.toLowerCase().includes(searchText);
-    return sameChat && matches;
-  });
-}
-```
-
-### `src/tools.ts`
+<details>
+<summary>src/tools.ts</summary>
 
 ```ts
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { saveNote, searchNotes, maxNoteCharacters } from './notes.ts';
 
-export function toolsForChat(chatId: string) {
-  // chatId отримуємо від Telegram. Модель не задає його в аргументах.
-  const save = defineTool({
+// chatId приходить від Telegram через код. Модель його не бачить і не може підмінити.
+
+export function saveNoteTool(chatId: string) {
+  return defineTool({
     name: 'saveNote',
-    description: 'Save a note for the current user when they ask to remember it.',
+    description: 'Save one note for the user when they ask to remember something.',
     input: v.object({
       text: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(maxNoteCharacters)),
     }),
     run: ({ data }) => ({ output: saveNote(chatId, data.text) }),
   });
+}
 
-  const search = defineTool({
+export function searchNotesTool(chatId: string) {
+  return defineTool({
     name: 'searchNotes',
-    description: "Find this user's saved notes containing the query text.",
-    input: v.object({ query: v.string() }),
+    description: "Find the user's saved notes that contain the query. An empty query returns all notes with their dates.",
+    input: v.object({
+      query: v.string(),
+    }),
     run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
   });
-
-  return [save, search];
 }
 ```
 
-## Якщо не встигаєш
-
-```bash
-git stash push -u -m "my-day2-progress"
-git switch step-03-tools
-```
-
-Першою командою зберігаєш власні зміни окремо, включно з новими src-файлами. `.env`, база й нотатки ігноруються Git і залишаються на місці. Не застосовуй stash поверх готової гілки автоматично.
-
-Далі: [04 · Settings і перевірка дозволів](04-permissions.md).
+</details>

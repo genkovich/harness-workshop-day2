@@ -1,149 +1,175 @@
-# 05 · Журнал і корисний feedback
+# 05. Журнал відповіді
 
-## Навіщо
+[Усі етапи](README.md) · [Попередній](04-permissions.md) · [Наступний](06-skill.md)
 
-Хочемо бачити, що сталося насправді. Показник токенів допомагає порівнювати запуски, а результат тула — відрізняти виконану дію від обіцянки.
+**Перед початком:** код із гілки `step-04-permissions`. **Результат етапу:** `step-05-feedback`. Змінюємо лише `src/`.
 
-Початок: `step-04-permissions`. Готовий результат: `step-05-feedback`.
+## Що робимо й навіщо
 
-## Як працює
+`npm run ask` показує кожен крок агента, бо так уміє `flue run`. А от бот у терміналі мовчить: ми бачимо лише відповідь у Telegram. Чи викликала модель `saveNote`, чи просто написала «зберіг»? Скільки токенів коштувало повідомлення? Учора ці питання закривав наш `console.log` усередині циклу. Сьогодні цикл не наш, тож видимість повертаємо через хук Flue.
 
-Створюємо `src/feedback.ts`: функція отримує usage і записує лише потрібний показник. Текст повідомлення та ключ API в журнал не додаємо. Підключаємо її через `useResponseFinish`: це подія завершення відповіді, а не кожного токена.
+## Чого бракує зараз і що зміниться
 
-Кількість токенів сама по собі не визначає якість. Для того самого запиту перевір: чи знайдено потрібну нотатку, чи не зачеплено чужі дані, чи є фактичний результат запису. Порівнюй однакові задачі.
+- `src/log.ts`: одна функція, що друкує рядок журналу.
+- `src/agent.ts`: хук `useResponseFinish` викликає її, коли відповідь завершена.
+- У журналі лише назви тулів, ознака помилки й кількість токенів. Текст користувача й нотатки туди не потрапляють.
 
-Корисний feedback — «не знайдено нотаток за query=X», а не просто «погано». Тул повертає дані або помилку, за якими агент може змінити наступний крок. `console.log` читає людина; модель не бачить журнал автоматично.
+## Маленькі зміни
 
-Не додаємо власний retry поверх усього Telegram-обробника. Повтор API та повтор запису — різні операції. Після збою спочатку перевіряємо, чи дія вже відбулася. Правила повторів самого runtime не прирівнюємо до exactly-once виконання зовнішніх ефектів.
+### 1. Рядок журналу: `src/log.ts`
 
-## Невеликі зміни
-
-### `src/agent.ts`
-
-Зміни на цьому етапі. Рядки з `+` додаємо, з `-` замінюємо; символи diff у файл не копіюємо. Повний готовий файл — наприкінці.
-
-```diff
-@@ -1,7 +1,8 @@
- 'use agent';
- 
--import { useModel, useTool, type AgentProps } from '@flue/runtime';
-+import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
- 
- import { toolsForChat } from './tools.ts';
-+import { reportUsage } from './feedback.ts';
- 
- export function Assistant({ id }: AgentProps) {
-@@ -12,4 +13,8 @@
-     useTool(tool);
-   }
-+
-+  useResponseFinish(({ response }) => {
-+    reportUsage(response.usage);
-+  });
- 
-   // Це інструкція агента. Завдання передамо окремим повідомленням.
-```
-
-### `src/feedback.ts`
-
-1. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Спершу опиши, що саме ми отримаємо від Flue:
 
 ```ts
-type Usage = {
-  totalTokens: number;
+type Response = {
+  toolCalls: readonly { tool: string; isError: boolean }[];
+  usage: { totalTokens: number };
 };
 ```
 
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+`toolCalls` це всі виклики тулів за відповідь, навіть якщо модель ходила по колу кілька разів. `usage` сумує токени за всі запити до моделі в межах цієї відповіді. Беремо лише поля, які друкуємо.
+
+Нижче сама функція:
 
 ```ts
-export function reportUsage(usage: Usage) {
-  const event = {
-    event: 'usage',
-    totalTokens: usage.totalTokens,
+// Цикл веде Flue, тож кроків ми не бачимо. Після відповіді друкуємо, що сталося насправді.
+export function logResponse(response: Response) {
+  const line = {
+    tools: response.toolCalls.map((call) => (call.isError ? `${call.tool} (помилка)` : call.tool)),
+    totalTokens: response.usage.totalTokens,
   };
-```
-
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-  console.log(JSON.stringify(event));
+  console.log(JSON.stringify(line));
 }
 ```
+
+Один рядок JSON на відповідь. Такий журнал легко читати очима і легко розібрати програмою.
+
+### 2. Хук в агенті
+
+У `src/agent.ts` додай `useResponseFinish` до імпорту з `@flue/runtime` і імпортуй функцію:
+
+```ts
+import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
+```
+
+```ts
+import { logResponse } from './log.ts';
+```
+
+Перед `return` з інструкцією додай:
+
+```ts
+  useResponseFinish(({ response }) => {
+    logResponse(response);
+  });
+```
+
+`useResponseFinish` Flue викликає один раз, коли відповідь повністю готова. У Flue є й інші хуки подій, наприклад на початку відповіді. Для журналу потрібен саме кінець: тоді список тулів і токени вже остаточні.
 
 ## Перевірка
 
 ```bash
-npm run typecheck
+npm run check
 npm test -- --test-name-pattern "^(00|01|02|03|04|05) "
 npm run bot
 ```
 
-Після відповіді у терміналі є JSON із event=usage і totalTokens. Окремо перевір фактичний результат дії. Менше токенів при неправильному результаті — не покращення.
+**Автоматична перевірка:** 12 тестів без мережі. Скриптована модель зберігає нотатку зі словом «Секретний», тест перехоплює `console.log` і перевіряє: рядок містить `saveNote` і число токенів, а слова «Секретний» у журналі немає.
 
-Якщо тест падає, дивись назву перевірки й фактичний результат. Перевірка типів виявляє помилки TypeScript; локальні тести не доводять доступність провайдера. Для помилки API перевір ключ, точну назву моделі та відповідь сервісу в терміналі.
+**Очікуємо вручну.** Напиши боту три повідомлення і подивись у термінал:
 
-## Готовий код етапу
+| Повідомлення | Рядок журналу |
+|---|---|
+| «Привіт» | `{"tools":[],"totalTokens":…}` |
+| «Запамʼятай: купити квитки» | `{"tools":["saveNote"],"totalTokens":…}` |
+| «Що в мене є?» | `{"tools":["searchNotes"],"totalTokens":…}` |
 
-Це повний стан змінених файлів. Інші файли залишаються з попереднього етапу.
+Порівняй токени першого і другого рядка. Навіть «Привіт» коштує понад тисячу токенів: інструкція і описи всіх тулів ідуть у кожен запит. Кожен новий тул робить дорожчим кожне повідомлення, навіть те, де тул не потрібен.
 
-### `src/agent.ts`
+Якщо бачиш `"saveNote (помилка)"`, модель передала аргументи, які не пройшли перевірку. Flue повернув їй помилку, і модель могла спробувати ще раз: тоді в списку буде і помилковий, і вдалий виклик.
+
+**Про повтори.** Flue сам повторює запит до моделі після тимчасової помилки, наприклад 429. Уже виконаний тул при цьому не запускається вдруге. Задвоєна нотатка частіше буває з іншої причини: Telegram повторно надіслав повідомлення, бо бота зупинили без `bot.stop()`. Саме тому в `bot.ts` є обробник Ctrl+C.
+
+**Збережи свою зміну:**
+
+```bash
+git add src
+git diff --cached
+git commit -m "Етап 05: журнал відповіді"
+```
+
+## Якщо не встиг: готова гілка
+
+```bash
+git add src
+git diff --cached --quiet || git commit -m "Моя спроба етапу 05"
+git fetch origin
+git switch -c work-06 origin/step-05-feedback
+npm run check
+```
+
+Якщо встиг сам, продовжуй у своїй гілці з [етапу 06](06-skill.md).
+
+## Готовий код
+
+Повний вміст файлів, які змінились на цьому етапі. Решта файлів лишається як була.
+
+<details>
+<summary>src/agent.ts</summary>
 
 ```ts
 'use agent';
 
 import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
+import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
+import { isOwner } from './settings.ts';
+import { logResponse } from './log.ts';
 
-import { toolsForChat } from './tools.ts';
-import { reportUsage } from './feedback.ts';
-
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  // Провайдера та модель задаємо в .env; цикл виконує Flue.
   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
 
-  for (const tool of toolsForChat(id)) {
-    useTool(tool);
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
+  // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
+  if (isOwner(id)) {
+    useTool(deleteNotesTool(id));
   }
 
   useResponseFinish(({ response }) => {
-    reportUsage(response.usage);
+    logResponse(response);
   });
 
-  // Це інструкція агента. Завдання передамо окремим повідомленням.
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
-    'Reply in Ukrainian.',
-    'Use tools to save and search notes. Do not invent saved facts.',
-    'Report success only after a successful tool result.',
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
   ].join('\n');
 }
 
 Assistant.agentName = 'workshop-assistant';
 ```
 
-### `src/feedback.ts`
+</details>
+
+<details>
+<summary>src/log.ts</summary>
 
 ```ts
-type Usage = {
-  totalTokens: number;
+type Response = {
+  toolCalls: readonly { tool: string; isError: boolean }[];
+  usage: { totalTokens: number };
 };
 
-export function reportUsage(usage: Usage) {
-  const event = {
-    event: 'usage',
-    totalTokens: usage.totalTokens,
+// Цикл веде Flue, тож кроків ми не бачимо. Після відповіді друкуємо, що сталося насправді.
+export function logResponse(response: Response) {
+  const line = {
+    tools: response.toolCalls.map((call) => (call.isError ? `${call.tool} (помилка)` : call.tool)),
+    totalTokens: response.usage.totalTokens,
   };
-
-  console.log(JSON.stringify(event));
+  console.log(JSON.stringify(line));
 }
 ```
 
-## Якщо не встигаєш
-
-```bash
-git stash push -u -m "my-day2-progress"
-git switch step-05-feedback
-```
-
-Першою командою зберігаєш власні зміни окремо, включно з новими src-файлами. `.env`, база й нотатки ігноруються Git і залишаються на місці. Не застосовуй stash поверх готової гілки автоматично.
-
-Далі: [06 · Skill для стендапу](06-skill.md).
+</details>
