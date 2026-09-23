@@ -4,7 +4,7 @@
 
 Підготуємо ключі й середовище до заняття. **Репозиторій клонуємо разом на воркшопі.** До цього встанови Node.js і Git та створи власного Telegram-бота.
 
-1. Перевір `node --version`, `npm --version`, `git --version`. Вимога зафіксованого Flue: Node 22.19+ у гілці 22 або 24.11+; у перевірках воркшопу — Node 26.9.0. Інструкція встановлення Node для твоєї ОС є у [підготовці першого дня](https://github.com/genkovich/harness-workshop/blob/start/runbooks/00-setup.md).
+1. Перевір `node --version`, `npm --version`, `git --version`. Вимога зафіксованого Flue: Node 22.19+ у гілці 22 або 24.11+; у перевірках воркшопу — Node 26.9.0. Інструкція встановлення Node для твоєї ОС є у [підготовці першого дня](https://github.com/genkovich/harness-workshop/blob/start/runbooks/00-start.md).
 2. Відкрий [@BotFather](https://t.me/BotFather), надішли `/newbot`, обери назву й username та збережи токен. Не публікуй його. [Офіційна інструкція Telegram](https://core.telegram.org/bots/tutorial#obtain-your-bot-token).
 3. Підготуй API-ключ провайдера моделі. Приклад за замовчуванням — Gemini через [Google AI Studio](https://aistudio.google.com/apikey). Доступність безкоштовної квоти залежить від облікового запису; безлімітної роботи не обіцяємо. Можна використати свій OpenAI, Anthropic, xAI або OpenRouter. Назва моделі має бути в каталозі встановленого Flue/Pi.
 
