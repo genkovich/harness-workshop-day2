@@ -1,6 +1,8 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
-import { saveNote, searchNotes, maxNoteCharacters } from './notes.ts';
+import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
+
+import { canDeleteNotes } from './settings.ts';
 
 export function toolsForChat(chatId: string) {
   // chatId отримуємо від Telegram. Модель не задає його в аргументах.
@@ -20,5 +22,17 @@ export function toolsForChat(chatId: string) {
     run: ({ data }) => ({ output: searchNotes(chatId, data.query) }),
   });
 
-  return [save, search];
+  const tools = [save, search];
+  if (!canDeleteNotes(chatId)) {
+    return tools;
+  }
+
+  const remove = defineTool({
+    name: 'deleteNotes',
+    description: 'Delete your own saved notes only on an explicit user request.',
+    input: v.object({}),
+    run: () => ({ output: deleteNotes(chatId) }),
+  });
+
+  return [...tools, remove];
 }

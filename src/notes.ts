@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { canDeleteNotes } from './settings.ts';
 import { randomUUID } from 'node:crypto';
 import * as v from 'valibot';
 
@@ -54,4 +55,16 @@ export function searchNotes(chatId: string, query: string) {
     const matches = note.text.toLowerCase().includes(searchText);
     return sameChat && matches;
   });
+}
+
+export function deleteNotes(chatId: string) {
+  // Перевірка залишається тут, навіть якщо функцію викличуть без моделі.
+  if (!canDeleteNotes(chatId)) {
+    throw new Error('Видалення дозволене лише власнику.');
+  }
+
+  const notes = readNotes();
+  const remaining = notes.filter((note) => note.chatId !== chatId);
+  writeNotes(remaining);
+  return { deleted: notes.length - remaining.length };
 }
