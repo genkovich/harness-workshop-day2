@@ -1,249 +1,203 @@
-# 02 · Повідомлення з Telegram
+# 02. Telegram
 
-## Навіщо
+[Усі етапи](README.md) · [Попередній](01-model.md) · [Наступний](03-tools.md)
 
-Повідомлення має дійти до агента й повернутися саме у свій чат. Окремий місток дозволить перевірити цей шлях без Telegram та платного API.
+**Перед початком:** код із гілки `step-01-model`. **Результат етапу:** `step-02-telegram`. Змінюємо лише `src/`.
 
-Початок: `step-01-model`. Готовий результат: `step-02-telegram`.
+## Що робимо й навіщо
 
-## Як працює
+Агент уже відповідає і памʼятає розмову, але тільки в терміналі. Переносимо його в Telegram. Головне рішення етапу вміщається в один рядок: **id чату в Telegram стає id агента**. Тоді кожен, хто пише боту, отримує свою розмову й свою історію, і для цього не треба писати жодного коду памʼяті.
 
-Спочатку створюємо `src/bridge.ts`. `dispatch` відправляє повідомлення та повертає квитанцію, `read` чекає відповідь саме за нею. Тип `Receipt` — назва невідомого наперед типу квитанції: ми не заглядаємо всередину, лише передаємо той самий обʼєкт.
+## Чого бракує зараз і що зміниться
 
-Потім додаємо `src/bot.ts`. `Bot` із grammY отримує оновлення Telegram. `start` запускає Flue; `sqlite` задає сховище runtime. `init(Assistant, { id })` звертається до агента конкретного чату. `chatId` надходить із Telegram, а не з тексту повідомлення.
+- `src/chat.ts`: місток між чатом і Flue. Отримує id чату й текст, повертає відповідь агента. Цей файл пишемо руками, бо в ньому вся суть етапу.
+- `src/bot.ts`: обвʼязка Telegram на бібліотеці grammY. Вона однакова для будь-якого бота, тому копіюємо її цілком і розбираємо по частинах.
+- `src/agent.ts` не змінюється. Той самий агент тепер працює і в терміналі, і в Telegram.
 
-У цьому прикладі обробляємо тільки приватні чати. `try/catch` повідомляє про збій. Він не повторює весь запит автоматично: попередня дія могла вже виконатися. `finally` закриває runtime при завершенні. Наявність bot.db — механізм Flue; власну систему памʼяті тут не пишемо.
+## Маленькі зміни
 
-## Невеликі зміни
+### 1. Місток: `src/chat.ts`
 
-### `src/bridge.ts`
-
-1. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Створи файл:
 
 ```ts
-// Receipt — квитанція Flue: повʼязуємо відправлення з його відповіддю.
-type AgentHandle<Receipt> = {
-  dispatch(text: string): Promise<Receipt>;
-  read(receipt: Receipt): Promise<{ text: string }>;
-};
+import { init } from '@flue/runtime';
+import { Assistant } from './agent.ts';
 ```
 
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Далі одна функція:
 
 ```ts
-export async function answer<Receipt>(
-  chatId: string,
-  text: string,
-  makeHandle: (id: string) => AgentHandle<Receipt>,
-) {
-  const agent = makeHandle(chatId);
+// Одна розмова = один агент. Id чату стає id агента, тож історія в кожного чату своя.
+export async function askAgent(chatId: string, text: string) {
+  const agent = init(Assistant, { id: chatId });
   const receipt = await agent.dispatch(text);
   const reply = await agent.read(receipt);
 ```
 
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
+`init(Assistant, { id })` дає «адресу» конкретної розмови. Сам по собі він нічого не створює: розмова зʼявиться при першому повідомленні, а наступні з тим самим id її продовжать.
+
+`dispatch` передає повідомлення в чергу агента і одразу повертає квитанцію (`receipt`). Відповіді ще немає: Flue тільки прийняв роботу. `read(receipt)` чекає, доки агент закінчить саме цю роботу, і повертає відповідь. Учора `runAgent` робив усе одним викликом; тут прийом і читання розділені, бо в реальному сервісі повідомлення може прийти вебхуком, а відповідь забрати інший процес.
+
+Заверши функцію:
 
 ```ts
   if (!reply.text.trim()) {
-    throw new Error('Модель не повернула текст. Перевір журнал запиту.');
+    throw new Error('Модель не повернула текст.');
   }
-```
-
-4. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
   return reply.text;
 }
 ```
 
-### `src/bot.ts`
+Telegram не приймає порожнє повідомлення. Краще явна помилка, ніж бот, який мовчки нічого не відповів.
 
-1. Додай імпорти та оголошення, які використовуємо нижче.
+### 2. Бот: `src/bot.ts`
 
-```ts
-import { Bot } from 'grammy';
-import { init } from '@flue/runtime';
-import { sqlite, start } from '@flue/runtime/node';
-import { Assistant } from './agent.ts';
-import { answer } from './bridge.ts';
-```
-
-2. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Створи файл і скопіюй код з розділу [«Готовий код»](#готовий-код) цілком. Що в ньому відбувається:
 
 ```ts
-const token = process.env.TELEGRAM_BOT_TOKEN;
-if (!token) {
-  throw new Error('Заповни TELEGRAM_BOT_TOKEN у .env.');
-}
+await start({ agents: [Assistant], db: sqlite('./bot.db') });
 ```
 
-3. Додай наступну частину в цей самий файл, зберігаючи порядок.
+`flue run` запускав Flue сам. Бот це наш власний процес, тож Flue стартуємо явно. `sqlite('./bot.db')` каже, де зберігати історію розмов. Без цього параметра історія жила б лише в памʼяті і зникала б при перезапуску.
 
 ```ts
-// Ідентичність агента визначає чат; історію зберігає runtime.
-const runtime = await start({ agents: [Assistant], db: sqlite('./bot.db') });
-const bot = new Bot(token);
-const replyCharacters = 4_000; // Залишаємо запас до обмеження Telegram.
+bot.command('start', async (ctx) => {
+  console.log('Chat id:', ctx.chat.id);
+  await ctx.reply(`Привіт! Твій chat id: ${ctx.chat.id}`);
+});
 ```
 
-4. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Команда `/start` показує id чату. Він знадобиться на етапі 04, щоб призначити власника бота.
 
 ```ts
 bot.on('message:text', async (ctx) => {
-  if (ctx.chat.type !== 'private') {
-    return;
-  }
-```
-
-5. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
-  const chatId = String(ctx.chat.id);
-  console.log('Ідентифікатор чату:', chatId);
-  if (ctx.message.text === '/start') {
-    await ctx.reply('Готовий. Ідентифікатор чату видно у твоєму терміналі.');
-    return;
-  }
-```
-
-6. Додай наступну частину в цей самий файл, зберігаючи порядок.
-
-```ts
   try {
-    const text = await answer(chatId, ctx.message.text, (id) => {
-      return init(Assistant, { id });
-    });
+    const answer = await askAgent(String(ctx.chat.id), ctx.message.text);
 ```
 
-7. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Кожне текстове повідомлення йде в `askAgent` разом з id свого чату. Id бере код з даних Telegram, модель його не вибирає. Далі відповідь надсилається шматками по 4000 символів, бо Telegram не приймає довші повідомлення. Помилку друкуємо в терміналі, а користувачу коротко пишемо, що не вийшло.
 
 ```ts
-    // Довгу відповідь надсилаємо частинами, а не мовчки обрізаємо.
-    for (let offset = 0; offset < text.length; offset += replyCharacters) {
-      await ctx.reply(text.slice(offset, offset + replyCharacters));
-    }
-  } catch (error) {
-    console.error('Запит не завершився:', error instanceof Error ? error.message : error);
-    await ctx.reply('Запит не завершився. Подивись причину в терміналі. Не повторюй дію запису, доки не перевіриш результат.');
-  }
-});
+process.once('SIGINT', () => bot.stop());
 ```
 
-8. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Коли зупиняєш бота через Ctrl+C, `bot.stop()` встигає сказати Telegram, які повідомлення вже оброблено. Без цього після перезапуску Telegram надішле останнє повідомлення ще раз, і агент, наприклад, збереже ту саму нотатку двічі. Бота на практиці ти перезапускатимеш після кожної зміни коду.
 
-```ts
-bot.catch((error) => {
-  console.error('Помилка Telegram:', error.error);
-});
+### 3. Запуск
+
+```bash
+npm run check
+npm run bot
 ```
 
-9. Додай наступну частину в цей самий файл, зберігаючи порядок.
+У терміналі: «Бот @твій_бот запущений». Відкрий свого бота в Telegram і надішли `/start`, потім «Привіт, мене звати Оля» і «Як мене звати?».
 
-```ts
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
-    if (bot.isRunning()) {
-      void bot.stop();
-    }
-  });
-}
-```
+Попроси сусіда написати твоєму боту «Як мене звати?». Його чат має інший id, тож агент його імені не знає і твого не назве.
 
-10. Додай наступну частину в цей самий файл, зберігаючи порядок.
+Розмова в терміналі (`npm run ask`) і розмова в Telegram не бачать одна одну: перша зберігається в `node_modules/.cache/flue/run.db`, друга в `bot.db`.
 
-```ts
-try {
-  await bot.start();
-} finally {
-  await runtime.stop();
-}
-```
+У груповому чаті id один на всіх учасників, тож і памʼять у групі буде спільна. Id і є межею памʼяті.
 
 ## Перевірка
 
 ```bash
-npm run typecheck
+npm run check
 npm test -- --test-name-pattern "^(00|01|02) "
-npm run bot
 ```
 
-Надішли /start, потім «Привіт» своєму боту. У терміналі видно chat id, у Telegram — відповідь. Інший чат отримує іншу ідентичність агента.
+**Автоматична перевірка:** 5 тестів без мережі й без Telegram. Вони викликають `askAgent` з двома різними id і дивляться, що розмови не змішуються, а порожня відповідь моделі стає помилкою.
 
-Якщо тест падає, дивись назву перевірки й фактичний результат. Перевірка типів виявляє помилки TypeScript; локальні тести не доводять доступність провайдера. Для помилки API перевір ключ, точну назву моделі та відповідь сервісу в терміналі.
+**Очікуємо вручну:** бот відповідає в Telegram, памʼятає імʼя в межах свого чату і не знає його в чужому.
 
-## Готовий код етапу
+**Якщо не так:**
 
-Це повний стан змінених файлів. Інші файли залишаються з попереднього етапу.
+- `Заповни TELEGRAM_BOT_TOKEN у .env`: токен порожній.
+- `409 Conflict` від Telegram: бот уже запущений в іншому терміналі. Зупини зайвий процес.
+- Бот мовчить: подивись термінал, там причина помилки. Часто це квота моделі.
 
-### `src/bridge.ts`
+**Збережи свою зміну:**
+
+```bash
+git add src
+git diff --cached
+git commit -m "Етап 02: Telegram"
+```
+
+## Якщо не встиг: готова гілка
+
+```bash
+git add src
+git diff --cached --quiet || git commit -m "Моя спроба етапу 02"
+git fetch origin
+git switch -c work-03 origin/step-02-telegram
+npm run check
+```
+
+Твій коміт лишився в попередній гілці. `.env`, `bot.db` і `node_modules` лишаються на місці.
+
+Якщо встиг сам, продовжуй у своїй гілці з [етапу 03](03-tools.md).
+
+## Готовий код
+
+Повний вміст файлів, які змінились на цьому етапі. Решта файлів лишається як була.
+
+<details>
+<summary>src/chat.ts</summary>
 
 ```ts
-// Receipt — квитанція Flue: повʼязуємо відправлення з його відповіддю.
-type AgentHandle<Receipt> = {
-  dispatch(text: string): Promise<Receipt>;
-  read(receipt: Receipt): Promise<{ text: string }>;
-};
+import { init } from '@flue/runtime';
+import { Assistant } from './agent.ts';
 
-export async function answer<Receipt>(
-  chatId: string,
-  text: string,
-  makeHandle: (id: string) => AgentHandle<Receipt>,
-) {
-  const agent = makeHandle(chatId);
+// Одна розмова = один агент. Id чату стає id агента, тож історія в кожного чату своя.
+export async function askAgent(chatId: string, text: string) {
+  const agent = init(Assistant, { id: chatId });
   const receipt = await agent.dispatch(text);
   const reply = await agent.read(receipt);
 
   if (!reply.text.trim()) {
-    throw new Error('Модель не повернула текст. Перевір журнал запиту.');
+    throw new Error('Модель не повернула текст.');
   }
-
   return reply.text;
 }
 ```
 
-### `src/bot.ts`
+</details>
+
+<details>
+<summary>src/bot.ts</summary>
 
 ```ts
 import { Bot } from 'grammy';
-import { init } from '@flue/runtime';
 import { sqlite, start } from '@flue/runtime/node';
 import { Assistant } from './agent.ts';
-import { answer } from './bridge.ts';
+import { askAgent } from './chat.ts';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
   throw new Error('Заповни TELEGRAM_BOT_TOKEN у .env.');
 }
 
-// Ідентичність агента визначає чат; історію зберігає runtime.
-const runtime = await start({ agents: [Assistant], db: sqlite('./bot.db') });
+// Запускаємо Flue у цьому процесі. Історію розмов він зберігає в bot.db.
+await start({ agents: [Assistant], db: sqlite('./bot.db') });
+
 const bot = new Bot(token);
-const replyCharacters = 4_000; // Залишаємо запас до обмеження Telegram.
+const telegramLimit = 4_000; // Telegram приймає до 4096 символів в одному повідомленні.
+
+bot.command('start', async (ctx) => {
+  console.log('Chat id:', ctx.chat.id);
+  await ctx.reply(`Привіт! Твій chat id: ${ctx.chat.id}`);
+});
 
 bot.on('message:text', async (ctx) => {
-  if (ctx.chat.type !== 'private') {
-    return;
-  }
-
-  const chatId = String(ctx.chat.id);
-  console.log('Ідентифікатор чату:', chatId);
-  if (ctx.message.text === '/start') {
-    await ctx.reply('Готовий. Ідентифікатор чату видно у твоєму терміналі.');
-    return;
-  }
-
   try {
-    const text = await answer(chatId, ctx.message.text, (id) => {
-      return init(Assistant, { id });
-    });
-
-    // Довгу відповідь надсилаємо частинами, а не мовчки обрізаємо.
-    for (let offset = 0; offset < text.length; offset += replyCharacters) {
-      await ctx.reply(text.slice(offset, offset + replyCharacters));
+    const answer = await askAgent(String(ctx.chat.id), ctx.message.text);
+    for (let offset = 0; offset < answer.length; offset += telegramLimit) {
+      await ctx.reply(answer.slice(offset, offset + telegramLimit));
     }
   } catch (error) {
-    console.error('Запит не завершився:', error instanceof Error ? error.message : error);
-    await ctx.reply('Запит не завершився. Подивись причину в терміналі. Не повторюй дію запису, доки не перевіриш результат.');
+    console.error('Агент не відповів:', error instanceof Error ? error.message : error);
+    await ctx.reply('Не вийшло відповісти. Причина в терміналі бота.');
   }
 });
 
@@ -251,28 +205,14 @@ bot.catch((error) => {
   console.error('Помилка Telegram:', error.error);
 });
 
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.once(signal, () => {
-    if (bot.isRunning()) {
-      void bot.stop();
-    }
-  });
-}
+// Ctrl+C: спершу чемно зупиняємо бота, щоб Telegram не надіслав останнє повідомлення вдруге.
+process.once('SIGINT', () => bot.stop());
+process.once('SIGTERM', () => bot.stop());
 
-try {
-  await bot.start();
-} finally {
-  await runtime.stop();
-}
+await bot.start({
+  // onStart спрацьовує, коли Telegram уже прийняв токен.
+  onStart: (me) => console.log(`Бот @${me.username} запущений. Напиши йому в Telegram. Зупинити: Ctrl+C.`),
+});
 ```
 
-## Якщо не встигаєш
-
-```bash
-git stash push -u -m "my-day2-progress"
-git switch step-02-telegram
-```
-
-Першою командою зберігаєш власні зміни окремо, включно з новими src-файлами. `.env`, база й нотатки ігноруються Git і залишаються на місці. Не застосовуй stash поверх готової гілки автоматично.
-
-Далі: [03 · Тули для нотаток](03-tools.md).
+</details>

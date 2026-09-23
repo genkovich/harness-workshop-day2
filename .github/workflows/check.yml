@@ -10,7 +10,7 @@ jobs:
           node-version: 26.9.0
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
+      - run: npm run check
       - name: Tests for this checkpoint
         shell: bash
         env:
