@@ -32,7 +32,7 @@ export function isOwner(chatId: string) {
 
 ### 2. Тул `deleteNotes`
 
-У `src/tools.ts` додай `deleteNotes` до імпорту з `./notes.ts`:
+У `src/tools.ts` заміни рядок імпорту з `./notes.ts`, щоб додати `deleteNotes`:
 
 ```ts
 import { saveNote, searchNotes, deleteNotes, maxNoteCharacters } from './notes.ts';
@@ -55,14 +55,14 @@ export function deleteNotesTool(chatId: string) {
 
 ### 3. Умовний тул в агенті
 
-У `src/agent.ts` онови імпорти:
+У `src/agent.ts` заміни рядок `import { saveNoteTool, searchNotesTool } from './tools.ts';` на два імпорти:
 
 ```ts
 import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
 import { isOwner } from './settings.ts';
 ```
 
-Після двох `useTool` додай:
+Під рядком `useTool(searchNotesTool(id));` додай:
 
 ```ts
   // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
