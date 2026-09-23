@@ -46,17 +46,19 @@ export function logResponse(response: Response) {
 
 ### 2. Хук в агенті
 
-У `src/agent.ts` додай `useResponseFinish` до імпорту з `@flue/runtime` і імпортуй функцію:
+У `src/agent.ts` заміни рядок імпорту з `@flue/runtime`, щоб додати `useResponseFinish`:
 
 ```ts
 import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
 ```
 
+Під рядком `import { isOwner } from './settings.ts';` додай імпорт нашої функції:
+
 ```ts
 import { logResponse } from './log.ts';
 ```
 
-Перед `return` з інструкцією додай:
+Після блоку `if (isOwner(id)) { ... }`, перед коментарем `// Рядок, який повертаємо…`, додай хук:
 
 ```ts
   useResponseFinish(({ response }) => {
