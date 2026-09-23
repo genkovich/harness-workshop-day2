@@ -1,8 +1,9 @@
 'use agent';
 
-import { useModel, useTool, type AgentProps } from '@flue/runtime';
+import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/runtime';
 
 import { toolsForChat } from './tools.ts';
+import { reportUsage } from './feedback.ts';
 
 export function Assistant({ id }: AgentProps) {
   // Провайдера та модель задаємо в .env; цикл виконує Flue.
@@ -11,6 +12,10 @@ export function Assistant({ id }: AgentProps) {
   for (const tool of toolsForChat(id)) {
     useTool(tool);
   }
+
+  useResponseFinish(({ response }) => {
+    reportUsage(response.usage);
+  });
 
   // Це інструкція агента. Завдання передамо окремим повідомленням.
   return [
