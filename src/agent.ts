@@ -1,31 +1,33 @@
 'use agent';
 
 import { useModel, useTool, useSkill, useResponseFinish, type AgentProps } from '@flue/runtime';
-
-import { toolsForChat } from './tools.ts';
-import { reportUsage } from './feedback.ts';
+import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
+import { isOwner } from './settings.ts';
+import { logResponse } from './log.ts';
 import { standup } from './skill.ts';
 
+// Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  // Провайдера та модель задаємо в .env; цикл виконує Flue.
   useModel(process.env.MODEL || 'google/gemini-2.5-flash');
 
-  for (const tool of toolsForChat(id)) {
-    useTool(tool);
+  useTool(saveNoteTool(id));
+  useTool(searchNotesTool(id));
+  // Не власник не отримує тул зовсім: модель не може викликати те, чого немає в списку.
+  if (isOwner(id)) {
+    useTool(deleteNotesTool(id));
   }
 
   useSkill(standup);
 
   useResponseFinish(({ response }) => {
-    reportUsage(response.usage);
+    logResponse(response);
   });
 
-  // Це інструкція агента. Завдання передамо окремим повідомленням.
+  // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
-    'Reply in Ukrainian.',
-    'Use tools to save and search notes. Do not invent saved facts.',
-    'Activate the standup skill when the user asks for a standup.',
-    'Report success only after a successful tool result.',
+    'You are a personal notes assistant in Telegram. Reply in Ukrainian, briefly.',
+    'Use saveNote and searchNotes for notes. Never claim a note is saved or found without a tool result.',
+    'If a tool returns an error, tell the user what failed.',
   ].join('\n');
 }
 
