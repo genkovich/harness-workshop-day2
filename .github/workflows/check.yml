@@ -1,13 +1,28 @@
 name: Check
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  check:
+  checkpoint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.19.0
+          node-version: 26.9.0
           cache: npm
       - run: npm ci
-      - run: npm run check
+      - run: npm run typecheck
+      - name: Tests for this checkpoint
+        shell: bash
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          case "$BRANCH" in
+            start) pattern='^00 ' ;;
+            step-01-*) pattern='^0[0-1] ' ;;
+            step-02-*) pattern='^0[0-2] ' ;;
+            step-03-*) pattern='^0[0-3] ' ;;
+            step-04-*) pattern='^0[0-4] ' ;;
+            step-05-*) pattern='^0[0-5] ' ;;
+            *) pattern='^0[0-6] ' ;;
+          esac
+          npm test -- --test-name-pattern "$pattern"

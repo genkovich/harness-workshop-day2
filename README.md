@@ -1,18 +1,13 @@
 # Harness Workshop · день 2
 
-Окремий Telegram-бот на Flue.
+Telegram-агент на Flue. Розвиваємо його маленькими кроками: модель → повідомлення → тули → дозволи → feedback → skill.
 
-```bash
-git clone --branch start https://github.com/genkovich/harness-workshop-day2.git
-cd harness-workshop-day2
-npm ci
-cp .env.example .env
-# Заповни TELEGRAM_BOT_TOKEN та GEMINI_API_KEY.
-npm run bot
-```
+Почни з [підготовки](runbooks/00-setup.md), далі — [всі ранбуки](runbooks/README.md). Клонуємо репозиторій разом на воркшопі; до заняття готуємо Node, Git і ключі.
 
-Гілка `start` — заготовка; `main` — готове рішення.
+`start` — готові залежності, .env.example і мінімальний src. `step-01-model` … `step-06-skill` — готові контрольні точки. `main` — повний приклад. Ранбуки й тести однакові в усіх гілках.
 
-Node 22.19 або 24.11+. Перевірки без ключів: `npm run check`.
+Код у src, інструкція skill — у skills. Коментарі українською, інструкції для моделі англійською. Файли даних і ключі не комітимо.
 
-[Практика](RUNBOOK.md). [День 1](https://github.com/genkovich/harness-workshop).
+На main: `npm run check` — перевірка типів і локальні тести без ключів. Живий запит до моделі та Telegram перевіряються окремо за ранбуком.
+
+[Перший день](https://github.com/genkovich/harness-workshop).
