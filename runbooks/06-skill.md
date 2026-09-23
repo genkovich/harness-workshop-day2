@@ -55,17 +55,19 @@ export const standup = defineSkill({
 
 ### 3. Підключи skill
 
-У `src/agent.ts` додай `useSkill` до імпорту з `@flue/runtime` і імпортуй skill:
+У `src/agent.ts` заміни рядок імпорту з `@flue/runtime`, щоб додати `useSkill`:
 
 ```ts
 import { useModel, useTool, useSkill, useResponseFinish, type AgentProps } from '@flue/runtime';
 ```
 
+Під рядком `import { logResponse } from './log.ts';` імпортуй skill:
+
 ```ts
 import { standup } from './skill.ts';
 ```
 
-Після блоку з `deleteNotes`:
+Після блоку `if (isOwner(id)) { ... }`, перед `useResponseFinish`, додай:
 
 ```ts
   useSkill(standup);
