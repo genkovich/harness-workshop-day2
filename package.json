@@ -9,7 +9,7 @@
   "scripts": {
     "bot": "tsx --env-file-if-exists=.env src/bot.ts",
     "ask": "node --env-file-if-exists=.env ./node_modules/@flue/cli/bin/flue.mjs run src/agent.ts -m",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "node --import tsx --test",
     "typecheck": "tsc --noEmit",
     "check": "npm run typecheck && npm test",
     "start": "tsx --env-file-if-exists=.env src/main.ts"
