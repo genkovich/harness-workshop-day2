@@ -7,11 +7,12 @@
     "node": "^22.19.0 || >=24.11.0"
   },
   "scripts": {
-    "bot": "tsx --env-file-if-exists=.env bot.ts",
-    "ask": "flue run agent.ts -m",
+    "bot": "tsx --env-file-if-exists=.env src/bot.ts",
+    "ask": "node --env-file-if-exists=.env ./node_modules/@flue/cli/bin/flue.mjs run src/agent.ts -m",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "start": "tsx --env-file-if-exists=.env src/main.ts"
   },
   "dependencies": {
     "@flue/cli": "2.0.6",
