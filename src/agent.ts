@@ -1,10 +1,11 @@
 'use agent';
 
 import { useModel } from '@flue/runtime';
+import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл і історія розмови на ньому.
 export function Assistant() {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [

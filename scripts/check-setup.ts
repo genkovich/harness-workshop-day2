@@ -3,8 +3,9 @@
 import { init, useModel, useTool, useResponseFinish, defineTool } from '@flue/runtime';
 import { start } from '@flue/runtime/node';
 import * as v from 'valibot';
+import { DEFAULT_MODEL } from '../src/models.ts';
 
-const model = process.env.MODEL || 'google/gemini-2.5-flash';
+const model = process.env.MODEL || DEFAULT_MODEL;
 let ok = true;
 
 async function checkTelegram() {
@@ -23,7 +24,7 @@ async function checkTelegram() {
 let toolCalled = false;
 
 function SetupCheck() {
-  useModel(model);
+  useModel(model, { thinkingLevel: 'off' });
   useTool(defineTool({
     name: 'ready',
     description: 'Connection check. Has no side effects.',
