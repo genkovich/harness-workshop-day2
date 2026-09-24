@@ -5,10 +5,11 @@ import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
 import { isOwner } from './settings.ts';
 import { logResponse } from './log.ts';
 import { standup } from './skill.ts';
+import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
