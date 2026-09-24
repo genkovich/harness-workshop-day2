@@ -24,7 +24,7 @@ async function checkTelegram() {
 let toolCalled = false;
 
 function SetupCheck() {
-  useModel(model, { thinkingLevel: 'off' });
+  useModel(model);
   useTool(defineTool({
     name: 'ready',
     description: 'Connection check. Has no side effects.',

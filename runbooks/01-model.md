@@ -42,7 +42,7 @@ import { DEFAULT_MODEL } from './models.ts';
 ```ts
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл і історія розмови на ньому.
 export function Assistant() {
-  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
+  useModel(process.env.MODEL || DEFAULT_MODEL);
 
   // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
@@ -52,7 +52,7 @@ export function Assistant() {
 }
 ```
 
-Учора агент був обʼєктом `news` з полями `model`, `system` і `tools`. У Flue агент це функція. Вона повертає інструкцію, а можливості додає викликами `use...`, їх називають хуками. `useModel` обирає модель з рядка `провайдер/модель` у `.env`, а якщо `MODEL` порожній, бере `DEFAULT_MODEL`. `thinkingLevel: 'off'` вимикає міркування Qwen: на безкоштовному Groq кожен токен на рахунку, а для нотаток міркування не потрібні.
+Учора агент був обʼєктом `news` з полями `model`, `system` і `tools`. У Flue агент це функція. Вона повертає інструкцію, а можливості додає викликами `use...`, їх називають хуками. `useModel` обирає модель з рядка `провайдер/модель` у `.env`, а якщо `MODEL` порожній, бере `DEFAULT_MODEL`.
 
 Flue викликає цю функцію заново перед **кожним** запитом до моделі. Це схоже на компонент React, який перемальовується при кожній зміні. Поки це нічого не дає, але на етапі 04 саме так ми будемо вмикати тул лише для власника.
 
@@ -155,7 +155,7 @@ import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл і історія розмови на ньому.
 export function Assistant() {
-  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
+  useModel(process.env.MODEL || DEFAULT_MODEL);
 
   // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [
