@@ -195,12 +195,14 @@ const qwen: Model<'openai-completions'> = {
   provider: 'groq',
   baseUrl: 'https://api.groq.com/openai/v1',
   reasoning: true,
-  // thinkingLevel 'off' в агенті стає reasoning_effort: none у запиті до Groq.
+  // Рівні міркувань Flue → reasoning_effort у Groq. Без thinkingLevel модель міркує, як учора.
   thinkingLevelMap: { off: 'none', minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: null, max: null },
   input: ['text'],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   contextWindow: 131072,
   maxTokens: 16384,
+  // Шаблон Qwen у Groq не знає ролі developer, тож інструкція має йти як system.
+  compat: { supportsDeveloperRole: false },
 };
 
 const groq = groqProvider();
