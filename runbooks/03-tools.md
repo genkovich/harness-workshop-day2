@@ -96,7 +96,7 @@ import { saveNoteTool, searchNotesTool } from './tools.ts';
 ```ts
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
@@ -120,10 +120,11 @@ export function Assistant({ id }: AgentProps) {
 
 ```bash
 npm run check
+rm -f node_modules/.cache/flue/run.db
 npm run ask -- "Запамʼятай: у пʼятницю реліз о 15:00"
 ```
 
-У кроках Flue має зʼявитися `tool saveNote`. Відкрий `notes.json`: там нотатка з `chatId: "terminal"`, бо саме такий id у скрипта `ask`.
+Рядок з `rm` скидає розмову `terminal`: історія етапу 01 тут не потрібна, а на безкоштовному Groq кожен зайвий токен історії наближає хвилинний ліміт. У кроках Flue має зʼявитися `tool saveNote`. Відкрий `notes.json`: там нотатка з `chatId: "terminal"`, бо саме такий id у скрипта `ask`.
 
 ```bash
 npm run ask -- "Коли в мене реліз?"
@@ -180,10 +181,11 @@ npm run check
 
 import { useModel, useTool, type AgentProps } from '@flue/runtime';
 import { saveNoteTool, searchNotesTool } from './tools.ts';
+import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));

@@ -78,6 +78,8 @@ npm run bot
 
 **Автоматична перевірка:** 12 тестів без мережі. Скриптована модель зберігає нотатку зі словом «Секретний», тест перехоплює `console.log` і перевіряє: рядок містить `saveNote` і число токенів, а слова «Секретний» у журналі немає.
 
+Перед ручною перевіркою скинь історію бота: зупини його (Ctrl+C), виконай `rm -f bot.db` і знову `npm run bot`. Тоді рядки журналу нижче покажуть ціну саме цих повідомлень, без історії попередніх етапів.
+
 **Очікуємо вручну.** Напиши боту три повідомлення і подивись у термінал:
 
 | Повідомлення | Рядок журналу |
@@ -126,10 +128,11 @@ import { useModel, useTool, useResponseFinish, type AgentProps } from '@flue/run
 import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
 import { isOwner } from './settings.ts';
 import { logResponse } from './log.ts';
+import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
