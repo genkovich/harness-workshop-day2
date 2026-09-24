@@ -5,7 +5,7 @@ import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл і історія розмови на ньому.
 export function Assistant() {
-  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
+  useModel(process.env.MODEL || DEFAULT_MODEL);
 
   // Рядок, який повертаємо, стає інструкцією агента (system prompt).
   return [

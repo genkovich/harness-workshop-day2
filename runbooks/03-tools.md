@@ -96,7 +96,7 @@ import { saveNoteTool, searchNotesTool } from './tools.ts';
 ```ts
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
+  useModel(process.env.MODEL || DEFAULT_MODEL);
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
@@ -185,7 +185,7 @@ import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
+  useModel(process.env.MODEL || DEFAULT_MODEL);
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
