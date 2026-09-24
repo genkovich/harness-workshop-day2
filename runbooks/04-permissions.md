@@ -105,11 +105,12 @@ npm run bot
 Те саме без Telegram, для чату `terminal`:
 
 ```bash
+rm -f node_modules/.cache/flue/run.db
 OWNER_CHAT_ID=terminal npm run ask -- "Видали всі мої нотатки"
 npm run ask -- "Видали всі мої нотатки"
 ```
 
-Змінна з командного рядка перекриває `.env` лише для цього запуску. У першому випадку `deleteNotes` є серед тулів, у другому немає.
+Перший рядок знову скидає розмову `terminal`, щоб запити були короткими. Змінна з командного рядка перекриває `.env` лише для цього запуску. У першому випадку `deleteNotes` є серед тулів, у другому немає.
 
 Якщо ти вже говорив з ботом до того, як став власником, Flue додасть у розмову службове повідомлення про новий тул. Це нормально: так модель дізнається, що список змінився посеред розмови.
 
@@ -148,10 +149,11 @@ npm run check
 import { useModel, useTool, type AgentProps } from '@flue/runtime';
 import { saveNoteTool, searchNotesTool, deleteNotesTool } from './tools.ts';
 import { isOwner } from './settings.ts';
+import { DEFAULT_MODEL } from './models.ts';
 
 // Flue викликає цю функцію перед кожним запитом до моделі. Цикл, історія й виконання тулів на ньому.
 export function Assistant({ id }: AgentProps) {
-  useModel(process.env.MODEL || 'google/gemini-2.5-flash');
+  useModel(process.env.MODEL || DEFAULT_MODEL, { thinkingLevel: 'off' });
 
   useTool(saveNoteTool(id));
   useTool(searchNotesTool(id));
