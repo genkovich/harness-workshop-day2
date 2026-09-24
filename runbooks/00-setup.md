@@ -27,18 +27,20 @@ git --version
 
 ## 3. Ключ моделі
 
-Обери **одного** провайдера. За замовчуванням беремо Gemini: безкоштовний ключ створюється в [Google AI Studio](https://aistudio.google.com/apikey). Ключ Groq з першого дня теж підійде.
+Беремо ті самі моделі, що й учора. За замовчуванням це Qwen 3.8 на Groq Free і твій ключ `GROQ_API_KEY` з першого дня, нових реєстрацій не треба. Якщо вчора працював з іншим провайдером, візьми його рядок із таблиці.
 
 | Провайдер | `MODEL` у `.env` | Змінна для ключа |
 |---|---|---|
-| Google | `google/gemini-2.5-flash` | `GEMINI_API_KEY` |
-| Groq | `groq/openai/gpt-oss-20b` | `GROQ_API_KEY` |
+| Groq, як учора | `groq/qwen/qwen3.8-27b` | `GROQ_API_KEY` |
 | OpenAI | `openai/gpt-4.1-mini` | `OPENAI_API_KEY` |
 | Anthropic | `anthropic/claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
 | OpenRouter | `openrouter/openai/gpt-4.1-mini` | `OPENROUTER_API_KEY` |
-| xAI | `xai/grok-4.3` | `XAI_API_KEY` |
 
-`MODEL` має формат `провайдер/модель`. Частина до першої `/` каже Flue, до якого сервісу йти, решта і є назвою моделі в цьому сервісі. Безкоштовні квоти мають ліміти запитів на хвилину, тож на занятті можливі паузи.
+`MODEL` має формат `провайдер/модель`. Частина до першої `/` каже Flue, до якого сервісу йти, решта і є назвою моделі в цьому сервісі. Для Groq це `qwen/qwen3.8-27b`, та сама назва, що вчора стояла в `GROQ_MODEL`.
+
+Qwen 3.8 зʼявився в Groq пізніше, ніж вийшла наша версія Flue, і Flue його ще не знає. Тому в `start` уже лежить `src/models.ts`: він додає цю модель у каталог Groq. Grok 4.7 з першого дня Flue теж не знає, а xAI публікує не всі дані цієї моделі, тож її ми не додавали. Якщо вчора був Grok, сьогодні візьми Groq.
+
+**Ліміти Groq Free** ті самі, що вчора: 30 запитів і 8 000 токенів на хвилину, 200 000 токенів на добу. Flue щоразу шле моделі інструкцію, описи тулів і всю історію розмови, тож один хід бота коштує від двох до пʼяти тисяч токенів. Пиши боту приблизно одне повідомлення на хвилину. Якщо відповідь не прийшла за 20 секунд, Flue чекає на квоту і повторить запит сам.
 
 **До заняття все готово, якщо** є версії Node і Git, збережений токен бота і ключ моделі.
 
@@ -51,11 +53,11 @@ npm ci
 git switch -c work-01
 ```
 
-`npm ci` ставить залежності з `package-lock.json` і створює `.env` з `.env.example`, якщо файла ще немає. Відкрий `.env` і заповни три рядки:
+`npm ci` ставить залежності з `package-lock.json` і створює `.env` з `.env.example`, якщо файла ще немає. Відкрий `.env`: `MODEL` уже стоїть, заповни ключ і токен:
 
 ```bash
-MODEL=google/gemini-2.5-flash
-GEMINI_API_KEY=твій-ключ
+MODEL=groq/qwen/qwen3.8-27b
+GROQ_API_KEY=твій-ключ-із-першого-дня
 TELEGRAM_BOT_TOKEN=токен-від-BotFather
 ```
 
@@ -68,7 +70,7 @@ TELEGRAM_BOT_TOKEN=токен-від-BotFather
 - `grammy` отримує повідомлення з Telegram і надсилає відповіді.
 - `valibot` описує й перевіряє аргументи тулів. Учора цю роль виконував Zod; Flue приймає Valibot.
 - `tsx` запускає TypeScript без збірки, `typescript` перевіряє типи.
-- `@earendil-works/pi-ai` потрібен лише тестам: це шар моделей всередині Flue, звідти беремо скриптовану модель.
+- `@earendil-works/pi-ai` це шар моделей усередині Flue. Звідти беремо скриптовану модель для тестів і каталог Groq для `src/models.ts`.
 
 ## Перевірка
 
@@ -84,7 +86,7 @@ npm run setup:check
 
 ```text
 Telegram: бот @твій_бот на звʼязку.
-Модель google/gemini-2.5-flash: ключ працює, тул викликано.
+Модель groq/qwen/qwen3.8-27b: ключ працює, тул викликано.
 Усе готово до практики.
 ```
 
@@ -95,19 +97,20 @@ Telegram: бот @твій_бот на звʼязку.
 | Немає `.env` | Виконай `npm run prepare`. На Windows перевір, що файл не називається `.env.txt`. |
 | `Telegram не прийняв токен` | Скопіюй токен з BotFather ще раз, без пробілів і лапок. |
 | `Provider is not configured` | Ключ порожній або лежить не в тій змінній. Звір назву змінної з таблицею. |
-| `Unknown model` | Назва моделі з помилкою. Бери точний рядок з таблиці. |
+| `Unknown model` | Назва моделі з помилкою. Бери точний рядок з таблиці. Для Qwen 3.8 ще перевір, що `src/models.ts` на місці. |
 | `429` або довга пауза | Вичерпано хвилинну квоту. Зачекай хвилину. Не запускай перевірку багато разів поспіль. |
+| `413` або `Request too large` | Історія розмови переросла хвилинний ліміт Groq Free. Почни розмову заново: для `npm run ask` видали `node_modules/.cache/flue/run.db`, для бота зупини його (Ctrl+C) і видали `bot.db`. |
 | `Модель відповіла, але не викликала тул` | Візьми іншу модель з таблиці, ця погано працює з тулами. |
 
 ## Що вже є в `start`
 
-У `src/` лежить лише `notes.ts`: це наш «застосунок», який зберігає нотатки у `notes.json`. Про агентів і моделі він нічого не знає, до нього ми підключимо агента на етапі 03. Скрипт перевірки лежить у [scripts/check-setup.ts](../scripts/check-setup.ts), skill для стендапу в [skills/standup/SKILL.md](../skills/standup/SKILL.md).
+У `src/` лежать два файли. `notes.ts` це наш «застосунок», який зберігає нотатки у `notes.json`. Про агентів і моделі він нічого не знає, до нього ми підключимо агента на етапі 03. `models.ts` додає Qwen 3.8 у каталог Flue, його ми не змінюємо. Скрипт перевірки лежить у [scripts/check-setup.ts](../scripts/check-setup.ts), skill для стендапу в [skills/standup/SKILL.md](../skills/standup/SKILL.md).
 
 Після успішної перевірки відкрий [етап 01](01-model.md).
 
 ## Готовий код
 
-Файл, який уже є в `start`. Інші файли зʼявляться на наступних етапах.
+Файли, які вже є в `start`. Інші файли зʼявляться на наступних етапах.
 
 <details>
 <summary>src/notes.ts</summary>
@@ -167,6 +170,41 @@ export function deleteNotes(chatId: string) {
   writeNotes(remaining);
   return { deleted: notes.length - remaining.length };
 }
+```
+
+</details>
+
+<details>
+<summary>src/models.ts</summary>
+
+```ts
+// Модель першого дня: Qwen 3.8 27B на Groq, той самий ключ GROQ_API_KEY.
+// Flue 2.0.6 бере каталог моделей з pi-ai 0.83, а Qwen 3.8 зʼявився в Groq пізніше.
+// Flue шукає модель лише в каталозі провайдера, тож додаємо її туди самі.
+import { setProvider } from '@flue/runtime';
+import type { Model } from '@earendil-works/pi-ai';
+import { groqProvider } from '@earendil-works/pi-ai/providers/groq';
+
+export const DEFAULT_MODEL = 'groq/qwen/qwen3.8-27b';
+
+// Дані з https://console.groq.com/docs/model/qwen/qwen3.8-27b
+const qwen: Model<'openai-completions'> = {
+  id: 'qwen/qwen3.8-27b',
+  name: 'Qwen 3.8 27B',
+  api: 'openai-completions',
+  provider: 'groq',
+  baseUrl: 'https://api.groq.com/openai/v1',
+  reasoning: true,
+  // thinkingLevel 'off' в агенті стає reasoning_effort: none у запиті до Groq.
+  thinkingLevelMap: { off: 'none', minimal: null, low: 'low', medium: 'medium', high: 'high', xhigh: null, max: null },
+  input: ['text'],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  contextWindow: 131072,
+  maxTokens: 16384,
+};
+
+const groq = groqProvider();
+setProvider({ ...groq, getModels: () => [...groq.getModels(), qwen] });
 ```
 
 </details>
